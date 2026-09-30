@@ -41,8 +41,8 @@ describe("agent orchestrator", () => {
 			},
 		};
 		const skillManager: SkillManager = {
-			selectSkill: () => "debugging",
-			loadSkill: async () => "# Debugging",
+			selectSkill: () => "bug-investigator",
+			loadSkill: async () => "# Bug Investigator",
 		};
 		const toolRunner = createToolRunner([
 			{

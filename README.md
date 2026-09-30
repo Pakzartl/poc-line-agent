@@ -183,9 +183,26 @@ Skills live in `src/skills/*.md`. The backend selects one skill from the incomin
 
 Included skills:
 
-- `debugging.md`
-- `code-review.md`
-- `architecture.md`
+- `repo-overview.md`
+- `find-code.md`
+- `explain-code.md`
+- `trace-feature.md`
+- `recent-changes.md`
+- `commit-review.md`
+- `pr-review.md`
+- `bug-investigator.md`
+- `test-finder.md`
+- `missing-tests.md`
+- `dependency-check.md`
+- `security-review.md`
+- `config-explainer.md`
+- `api-catalog.md`
+- `database-map.md`
+- `architecture-map.md`
+- `onboarding-guide.md`
+- `release-summary.md`
+- `incident-triage.md`
+- `repo-comparison.md`
 
 ## Tools
 
