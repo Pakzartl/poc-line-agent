@@ -5,6 +5,18 @@ export type AppConfig = {
 		channelAccessToken: string;
 		apiBaseUrl: string;
 	};
+	telegram: {
+		botToken: string;
+		webhookSecret: string;
+		apiBaseUrl: string;
+	};
+	whatsapp: {
+		accessToken: string;
+		phoneNumberId: string;
+		verifyToken: string;
+		appSecret: string;
+		apiBaseUrl: string;
+	};
 	llm: {
 		apiKey: string;
 		baseUrl: string;
@@ -26,6 +38,8 @@ export type AppConfig = {
 
 const defaultOpenAiBaseUrl = "https://api.openai.com/v1";
 const defaultLineApiBaseUrl = "https://api.line.me";
+const defaultTelegramApiBaseUrl = "https://api.telegram.org";
+const defaultWhatsAppApiBaseUrl = "https://graph.facebook.com/v26.0";
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
 	return {
@@ -35,6 +49,22 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
 			channelAccessToken: env.LINE_CHANNEL_ACCESS_TOKEN ?? "",
 			apiBaseUrl: stripTrailingSlash(
 				env.LINE_API_BASE_URL ?? defaultLineApiBaseUrl,
+			),
+		},
+		telegram: {
+			botToken: env.TELEGRAM_BOT_TOKEN ?? "",
+			webhookSecret: env.TELEGRAM_WEBHOOK_SECRET ?? "",
+			apiBaseUrl: stripTrailingSlash(
+				env.TELEGRAM_API_BASE_URL ?? defaultTelegramApiBaseUrl,
+			),
+		},
+		whatsapp: {
+			accessToken: env.WHATSAPP_ACCESS_TOKEN ?? "",
+			phoneNumberId: env.WHATSAPP_PHONE_NUMBER_ID ?? "",
+			verifyToken: env.WHATSAPP_VERIFY_TOKEN ?? "",
+			appSecret: env.WHATSAPP_APP_SECRET ?? "",
+			apiBaseUrl: stripTrailingSlash(
+				env.WHATSAPP_API_BASE_URL ?? defaultWhatsAppApiBaseUrl,
 			),
 		},
 		llm: {
@@ -61,8 +91,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
 
 export function validateConfig(config: AppConfig): void {
 	const requiredValues = [
-		["LINE_CHANNEL_SECRET", config.line.channelSecret],
-		["LINE_CHANNEL_ACCESS_TOKEN", config.line.channelAccessToken],
 		["OPENAI_API_KEY", config.llm.apiKey],
 		["OPENAI_MODEL", config.llm.model],
 		["GITHUB_OWNER", config.github.owner],
@@ -76,6 +104,55 @@ export function validateConfig(config: AppConfig): void {
 	if (missing.length > 0) {
 		throw new Error(
 			`Missing required environment variables: ${missing.join(", ")}`,
+		);
+	}
+
+	const providers = [
+		{
+			name: "LINE",
+			values: [
+				["LINE_CHANNEL_SECRET", config.line.channelSecret],
+				["LINE_CHANNEL_ACCESS_TOKEN", config.line.channelAccessToken],
+			],
+		},
+		{
+			name: "Telegram",
+			values: [
+				["TELEGRAM_BOT_TOKEN", config.telegram.botToken],
+				["TELEGRAM_WEBHOOK_SECRET", config.telegram.webhookSecret],
+			],
+		},
+		{
+			name: "WhatsApp",
+			values: [
+				["WHATSAPP_ACCESS_TOKEN", config.whatsapp.accessToken],
+				["WHATSAPP_PHONE_NUMBER_ID", config.whatsapp.phoneNumberId],
+				["WHATSAPP_VERIFY_TOKEN", config.whatsapp.verifyToken],
+				["WHATSAPP_APP_SECRET", config.whatsapp.appSecret],
+			],
+		},
+	] as const;
+	let configuredProviders = 0;
+
+	for (const provider of providers) {
+		const present = provider.values.filter(([, value]) => value.trim());
+		if (present.length === 0) {
+			continue;
+		}
+		const providerMissing = provider.values
+			.filter(([, value]) => !value.trim())
+			.map(([name]) => name);
+		if (providerMissing.length > 0) {
+			throw new Error(
+				`Incomplete ${provider.name} configuration: ${providerMissing.join(", ")}`,
+			);
+		}
+		configuredProviders += 1;
+	}
+
+	if (configuredProviders === 0) {
+		throw new Error(
+			"Configure at least one messaging provider: LINE, Telegram, or WhatsApp",
 		);
 	}
 
@@ -114,6 +191,8 @@ export function validateConfig(config: AppConfig): void {
 	for (const [name, value] of [
 		["OPENAI_BASE_URL", config.llm.baseUrl],
 		["LINE_API_BASE_URL", config.line.apiBaseUrl],
+		["TELEGRAM_API_BASE_URL", config.telegram.apiBaseUrl],
+		["WHATSAPP_API_BASE_URL", config.whatsapp.apiBaseUrl],
 		["GITHUB_API_BASE_URL", config.github.apiBaseUrl],
 	] as const) {
 		try {

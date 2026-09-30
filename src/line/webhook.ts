@@ -1,4 +1,5 @@
 import type { AgentOrchestrator } from "../agent/orchestrator";
+import { answerConversation } from "../agent/conversation";
 import type { AppConfig } from "../config";
 import type { SessionMemoryStore } from "../memory/session-memory";
 import type { LineReplyClient } from "./reply";
@@ -53,19 +54,15 @@ export async function handleLineWebhook(
 	const textEvents = extractTextEvents(body);
 
 	for (const event of textEvents) {
-		const memoryEnabled = event.memoryEnabled ?? true;
-		const history =
-			memoryEnabled && event.sessionId
-				? await deps.memoryStore.read(event.sessionId)
-				: [];
-		const answer = await deps.orchestrator.answer(event.text, history);
+		const answer = await answerConversation(
+			{
+				question: event.text,
+				sessionId: event.sessionId,
+				memoryEnabled: event.memoryEnabled,
+			},
+			deps,
+		);
 		await deps.lineReplyClient.reply(event.replyToken, answer);
-		if (memoryEnabled && event.sessionId) {
-			await deps.memoryStore.append(event.sessionId, [
-				{ role: "user", content: event.text },
-				{ role: "assistant", content: answer },
-			]);
-		}
 	}
 
 	return Response.json({ ok: true });
@@ -105,13 +102,13 @@ function getSessionId(
 	source: LineTextMessageEvent["source"],
 ): string | undefined {
 	if (source?.type === "group" && source.groupId) {
-		return `group:${source.groupId}`;
+		return `line:group:${source.groupId}`;
 	}
 	if (source?.type === "room" && source.roomId) {
-		return `room:${source.roomId}`;
+		return `line:room:${source.roomId}`;
 	}
 	if (source?.userId) {
-		return `user:${source.userId}`;
+		return `line:user:${source.userId}`;
 	}
 	return undefined;
 }

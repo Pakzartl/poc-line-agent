@@ -1,6 +1,14 @@
-# LINE Agent POC
+# Messaging Agent POC
 
-Bun/TypeScript proof of concept for a LINE AI coding assistant that uses Markdown skills, OpenAI-compatible Responses API tool calling, and read-only GitHub source tools.
+Bun/TypeScript proof of concept for an AI coding assistant on Telegram, WhatsApp, and LINE. It uses Markdown skills, OpenAI-compatible Responses API tool calling, read-only GitHub source tools, and optional local session memory.
+
+## Channel recommendation
+
+**Telegram is the recommended default for internal developer assistants.** Its Bot API has a straightforward webhook secret and normal `sendMessage` calls without an expiring reply token.
+
+WhatsApp is also supported and is usually a better fit than LINE when the intended users already work in WhatsApp. It requires Meta Business onboarding and is still subject to WhatsApp's customer-service window, template, and pricing rules.
+
+**LINE is not recommended for long-running agent tasks.** A LINE reply token is single-use and should be used within one minute. Production webhook ingress should target an acknowledgement within three seconds as an engineering target; that is not a documented LINE SLA, and this synchronous POC does not guarantee it. A slow model or tool run can outlive the useful reply-token window and require an asynchronous push message. LINE reply messages themselves do not consume the monthly message quota, but push-message fallbacks do. That combination makes LINE more restrictive and potentially more expensive for coding-agent workloads than Telegram, and often than WhatsApp.
 
 ## Run
 
@@ -9,14 +17,73 @@ cp .env.local.example .env.local
 bun run dev
 ```
 
+Configure at least one complete messaging provider block. Unused provider blocks must remain entirely blank.
+
 Endpoints:
 
 - `GET /health`
+- `POST /telegram/webhook`
+- `GET /whatsapp/webhook` for Meta's verification challenge
+- `POST /whatsapp/webhook`
 - `POST /line/webhook`
 
-LINE webhook requests are verified against `x-line-signature` before JSON parsing. The verifier uses the exact raw request body with HMAC-SHA256 and `LINE_CHANNEL_SECRET`.
+All inbound provider requests are authenticated before their JSON body is processed:
 
-## Local Sandbox
+- Telegram checks `X-Telegram-Bot-Api-Secret-Token`.
+- WhatsApp checks `X-Hub-Signature-256` against the exact raw body with the Meta App Secret.
+- LINE checks `x-line-signature` against the exact raw body with HMAC-SHA256 and the channel secret.
+
+## Telegram setup
+
+Set these values in `.env.local`:
+
+```dotenv
+TELEGRAM_BOT_TOKEN=replace-with-botfather-token
+TELEGRAM_WEBHOOK_SECRET=replace-with-a-random-secret
+TELEGRAM_API_BASE_URL=https://api.telegram.org
+```
+
+Expose the server over HTTPS, then register the webhook. Telegram accepts only `A-Z`, `a-z`, `0-9`, `_`, and `-` in the webhook secret.
+
+```sh
+curl -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "url": "https://agent.example.com/telegram/webhook",
+    "secret_token": "replace-with-the-same-webhook-secret",
+    "allowed_updates": ["message"]
+  }'
+```
+
+The Bot API token is part of Telegram's request URL. Avoid saving the expanded command in shell history or logs.
+
+## WhatsApp setup
+
+Create a Meta app with the WhatsApp product and configure:
+
+```dotenv
+WHATSAPP_ACCESS_TOKEN=replace-with-system-user-or-test-token
+WHATSAPP_PHONE_NUMBER_ID=replace-with-phone-number-id
+WHATSAPP_VERIFY_TOKEN=replace-with-your-own-random-verification-token
+WHATSAPP_APP_SECRET=replace-with-meta-app-secret
+WHATSAPP_API_BASE_URL=https://graph.facebook.com/v26.0
+```
+
+In the Meta App Dashboard, set the callback URL to `https://agent.example.com/whatsapp/webhook`, enter the same `WHATSAPP_VERIFY_TOKEN`, and subscribe the WhatsApp Business Account to the `messages` field. The GET verification request returns `hub.challenge`; POST deliveries are validated with the App Secret before processing.
+
+`WHATSAPP_API_BASE_URL` is configurable because Graph API versions expire. Update it to a currently supported version when upgrading the deployment.
+
+## LINE setup
+
+```dotenv
+LINE_CHANNEL_SECRET=replace-with-line-channel-secret
+LINE_CHANNEL_ACCESS_TOKEN=replace-with-line-channel-access-token
+LINE_API_BASE_URL=https://api.line.me
+```
+
+Set the Messaging API webhook URL to `https://agent.example.com/line/webhook`. The implementation uses the one-time reply token and does not automatically fall back to a quota-consuming push message.
+
+## Local sandbox
 
 Run a full local loop without LINE, OpenAI, or GitHub credentials:
 
@@ -30,13 +97,11 @@ Run the same local UI with real OpenAI and GitHub credentials from `.env.local`:
 bun run sandbox:live
 ```
 
-Live mode still captures the final LINE reply locally because the simulated webhook uses a local reply token. It does not send the sandbox response to a real LINE chat.
+The browser sandbox currently simulates LINE ingress so it can exercise signature verification and reply-token behavior locally. Live mode still captures the final reply locally; it does not send a response to a real chat. The automated sandbox suite runs full webhook-to-reply loops for LINE, Telegram, and WhatsApp, while keeping every external service mocked.
 
-Conversation memory is opt-in in the sandbox UI. When enabled, recent user and assistant messages are persisted under `.sessions/<hashed-session-id>/memory.json`; the session ID is hashed so the LINE user ID is not used as a directory name. Reset session clears that sandbox session's memory.
+Conversation memory is opt-in in the sandbox UI. When enabled, recent user and assistant messages are persisted under `.sessions/<hashed-session-id>/memory.json`. The provider-qualified session ID is hashed and is never used directly as a directory name. Reset session clears that sandbox session's memory.
 
-The sandbox starts the real LINE agent plus local mocks for the OpenAI Responses API, GitHub REST, and LINE reply API. Send a signed simulated LINE webhook through the sandbox endpoint:
-
-Open the browser UI at [http://127.0.0.1:3101](http://127.0.0.1:3101), or send a request directly:
+Open [http://127.0.0.1:3101](http://127.0.0.1:3101), or send a request directly:
 
 ```sh
 curl -s -X POST http://127.0.0.1:3101/sandbox/send \
@@ -50,7 +115,7 @@ Inspect captured traces:
 curl -s http://127.0.0.1:3101/sandbox/traces
 ```
 
-Run the same full loop as an automated E2E test:
+Run the automated full-loop test:
 
 ```sh
 bun run test:sandbox
@@ -63,11 +128,8 @@ Defaults:
 - Override with `PORT`, `SANDBOX_PORT`, or `LINE_CHANNEL_SECRET`.
 - Both sandbox servers bind to `127.0.0.1` only.
 
-## Required Environment
+## Shared environment
 
-- `LINE_CHANNEL_SECRET`
-- `LINE_CHANNEL_ACCESS_TOKEN`
-- `LINE_API_BASE_URL` defaults to `https://api.line.me`.
 - `OPENAI_API_KEY`
 - `OPENAI_BASE_URL` defaults to `https://api.openai.com/v1`. For OpenRouter, use `https://openrouter.ai/api/v1` and an OpenRouter model slug.
 - `OPENAI_MODEL` defaults to `gpt-5.4-mini`.
@@ -97,6 +159,6 @@ The model can request:
 - `read_file(path)`
 - `get_commit(sha)`
 
-All GitHub requests are made by the backend. Tokens are never included in model input or LINE replies.
+All GitHub requests are made by the backend. Tokens are never included in model input or chat replies.
 
 Responses are sent with `store: false`; only bounded tool output is returned to the model.
