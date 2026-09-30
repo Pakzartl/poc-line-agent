@@ -6,6 +6,8 @@ export type SandboxState = {
 	responsesRequests: unknown[];
 	githubRequests: string[];
 	lineReplies: unknown[];
+	telegramReplies: unknown[];
+	whatsAppReplies: unknown[];
 	webhookResults: unknown[];
 };
 
@@ -23,6 +25,8 @@ export function createSandboxState(): SandboxState {
 		responsesRequests: [],
 		githubRequests: [],
 		lineReplies: [],
+		telegramReplies: [],
+		whatsAppReplies: [],
 		webhookResults: [],
 	};
 }
@@ -63,6 +67,22 @@ export function createSandboxMockHandler(
 			const body = await request.json();
 			options.state.lineReplies.push(body);
 			return Response.json({});
+		}
+
+		if (
+			request.method === "POST" &&
+			/^\/telegram\/bot[^/]+\/sendMessage$/.test(url.pathname)
+		) {
+			options.state.telegramReplies.push(await request.json());
+			return Response.json({ ok: true });
+		}
+
+		if (
+			request.method === "POST" &&
+			/^\/whatsapp\/v[^/]+\/[^/]+\/messages$/.test(url.pathname)
+		) {
+			options.state.whatsAppReplies.push(await request.json());
+			return Response.json({ messages: [{ id: "wamid.sandbox" }] });
 		}
 
 		if (request.method === "POST" && url.pathname === "/sandbox/send") {
@@ -122,14 +142,14 @@ async function handleOpenAiResponses(
 	return Response.json({
 		id: "resp-sandbox-final",
 		output_text:
-			"Sandbox full loop OK: searched code, read src/auth/login.ts, and replied through mock LINE.",
+			"Sandbox full loop OK: searched code, read src/auth/login.ts, and replied through the configured messaging channel.",
 		output: [
 			{
 				type: "message",
 				content: [
 					{
 						type: "output_text",
-						text: "Sandbox full loop OK: searched code, read src/auth/login.ts, and replied through mock LINE.",
+						text: "Sandbox full loop OK: searched code, read src/auth/login.ts, and replied through the configured messaging channel.",
 					},
 				],
 			},
@@ -233,6 +253,8 @@ function resetState(state: SandboxState): void {
 	state.responsesRequests.length = 0;
 	state.githubRequests.length = 0;
 	state.lineReplies.length = 0;
+	state.telegramReplies.length = 0;
+	state.whatsAppReplies.length = 0;
 	state.webhookResults.length = 0;
 }
 

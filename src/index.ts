@@ -5,4 +5,4 @@ const config = loadConfig();
 validateConfig(config);
 const server = startLineAgentServer(config);
 
-console.log(`LINE Agent POC listening on :${server.port}`);
+console.log(`Messaging Agent POC listening on :${server.port}`);

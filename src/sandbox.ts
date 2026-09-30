@@ -31,7 +31,7 @@ const mockServer = Bun.serve({
 		getAppOrigin: () => appOrigin,
 		providerMode,
 		repository,
-		resetSessionMemory: () => memoryStore.clear("user:sandbox-user"),
+		resetSessionMemory: () => memoryStore.clear("line:user:sandbox-user"),
 	}),
 });
 const mockOrigin = `http://127.0.0.1:${mockServer.port}`;

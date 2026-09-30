@@ -15,6 +15,46 @@ describe("config validation", () => {
 		expect(() => validateConfig(loadConfig(validEnv))).not.toThrow();
 	});
 
+	test("accepts Telegram or WhatsApp without LINE credentials", () => {
+		const shared = {
+			OPENAI_API_KEY: "openai-key",
+			GITHUB_OWNER: "superset",
+			GITHUB_REPO: "superset",
+			GITHUB_TOKEN: "github-token",
+		};
+		expect(() =>
+			validateConfig(
+				loadConfig({
+					...shared,
+					TELEGRAM_BOT_TOKEN: "bot-token",
+					TELEGRAM_WEBHOOK_SECRET: "webhook-secret",
+				}),
+			),
+		).not.toThrow();
+		expect(() =>
+			validateConfig(
+				loadConfig({
+					...shared,
+					WHATSAPP_ACCESS_TOKEN: "access-token",
+					WHATSAPP_PHONE_NUMBER_ID: "phone-id",
+					WHATSAPP_VERIFY_TOKEN: "verify-token",
+					WHATSAPP_APP_SECRET: "app-secret",
+				}),
+			),
+		).not.toThrow();
+	});
+
+	test("rejects partial provider configuration", () => {
+		expect(() =>
+			validateConfig(
+				loadConfig({
+					...validEnv,
+					TELEGRAM_BOT_TOKEN: "bot-token",
+				}),
+			),
+		).toThrow("Incomplete Telegram configuration: TELEGRAM_WEBHOOK_SECRET");
+	});
+
 	test("rejects missing credentials and invalid numeric values", () => {
 		expect(() => validateConfig(loadConfig({}))).toThrow(
 			"Missing required environment variables",

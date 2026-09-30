@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { startLineAgentServer } from "../app";
 import { loadConfig } from "../config";
+import { createWhatsAppSignature } from "../whatsapp/signature";
 import { createSandboxMockHandler, createSandboxState } from "./mock-services";
 
 const servers: Bun.Server<undefined>[] = [];
@@ -89,5 +90,139 @@ describe("local sandbox full loop", () => {
 			"Sandbox full loop OK",
 		);
 		expect(state.responsesRequests).toHaveLength(3);
+	});
+
+	test("completes the full loop from Telegram webhook to Telegram reply", async () => {
+		const state = createSandboxState();
+		let appOrigin = "";
+		const mockServer = Bun.serve({
+			hostname: "127.0.0.1",
+			port: 0,
+			fetch: createSandboxMockHandler({
+				state,
+				channelSecret: "unused-line-secret",
+				getAppOrigin: () => appOrigin,
+			}),
+		});
+		servers.push(mockServer);
+		const mockOrigin = `http://127.0.0.1:${mockServer.port}`;
+		const config = loadConfig({
+			PORT: "0",
+			TELEGRAM_BOT_TOKEN: "telegram-token",
+			TELEGRAM_WEBHOOK_SECRET: "telegram-secret",
+			TELEGRAM_API_BASE_URL: `${mockOrigin}/telegram`,
+			OPENAI_API_KEY: "openai-key",
+			OPENAI_BASE_URL: `${mockOrigin}/openai`,
+			OPENAI_MODEL: "sandbox-model",
+			GITHUB_OWNER: "sandbox",
+			GITHUB_REPO: "repo",
+			GITHUB_TOKEN: "github-token",
+			GITHUB_API_BASE_URL: `${mockOrigin}/github`,
+		});
+		const appServer = startLineAgentServer(config, { hostname: "127.0.0.1" });
+		servers.push(appServer);
+		appOrigin = `http://127.0.0.1:${appServer.port}`;
+
+		const response = await fetch(`${appOrigin}/telegram/webhook`, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"X-Telegram-Bot-Api-Secret-Token": "telegram-secret",
+			},
+			body: JSON.stringify({
+				message: {
+					message_id: 42,
+					text: "why does login fail?",
+					chat: { id: 1001 },
+				},
+			}),
+		});
+
+		expect(response.status).toBe(200);
+		expect(state.responsesRequests).toHaveLength(3);
+		expect(state.githubRequests).toContain(
+			"/github/repos/sandbox/repo/contents/src/auth/login.ts?ref=main",
+		);
+		expect(state.telegramReplies).toHaveLength(1);
+		expect(state.telegramReplies[0]).toMatchObject({
+			chat_id: 1001,
+			reply_parameters: { message_id: 42 },
+		});
+	});
+
+	test("completes the full loop from WhatsApp webhook to WhatsApp reply", async () => {
+		const state = createSandboxState();
+		let appOrigin = "";
+		const mockServer = Bun.serve({
+			hostname: "127.0.0.1",
+			port: 0,
+			fetch: createSandboxMockHandler({
+				state,
+				channelSecret: "unused-line-secret",
+				getAppOrigin: () => appOrigin,
+			}),
+		});
+		servers.push(mockServer);
+		const mockOrigin = `http://127.0.0.1:${mockServer.port}`;
+		const config = loadConfig({
+			PORT: "0",
+			WHATSAPP_ACCESS_TOKEN: "whatsapp-token",
+			WHATSAPP_PHONE_NUMBER_ID: "phone-id",
+			WHATSAPP_VERIFY_TOKEN: "verify-token",
+			WHATSAPP_APP_SECRET: "app-secret",
+			WHATSAPP_API_BASE_URL: `${mockOrigin}/whatsapp/v26.0`,
+			OPENAI_API_KEY: "openai-key",
+			OPENAI_BASE_URL: `${mockOrigin}/openai`,
+			OPENAI_MODEL: "sandbox-model",
+			GITHUB_OWNER: "sandbox",
+			GITHUB_REPO: "repo",
+			GITHUB_TOKEN: "github-token",
+			GITHUB_API_BASE_URL: `${mockOrigin}/github`,
+		});
+		const appServer = startLineAgentServer(config, { hostname: "127.0.0.1" });
+		servers.push(appServer);
+		appOrigin = `http://127.0.0.1:${appServer.port}`;
+		const rawBody = JSON.stringify({
+			entry: [
+				{
+					changes: [
+						{
+							field: "messages",
+							value: {
+								messages: [
+									{
+										from: "66812345678",
+										id: "wamid.inbound",
+										type: "text",
+										text: { body: "why does login fail?" },
+									},
+								],
+							},
+						},
+					],
+				},
+			],
+		});
+
+		const response = await fetch(`${appOrigin}/whatsapp/webhook`, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"X-Hub-Signature-256": createWhatsAppSignature(rawBody, "app-secret"),
+			},
+			body: rawBody,
+		});
+
+		expect(response.status).toBe(200);
+		expect(state.responsesRequests).toHaveLength(3);
+		expect(state.githubRequests).toContain(
+			"/github/repos/sandbox/repo/contents/src/auth/login.ts?ref=main",
+		);
+		expect(state.whatsAppReplies).toHaveLength(1);
+		expect(state.whatsAppReplies[0]).toMatchObject({
+			messaging_product: "whatsapp",
+			to: "66812345678",
+			context: { message_id: "wamid.inbound" },
+		});
 	});
 });
