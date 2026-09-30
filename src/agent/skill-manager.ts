@@ -29,9 +29,9 @@ export type SkillManager = {
 	loadSkill(name: SkillName): Promise<string>;
 };
 
-export function createSkillManager(
-	baseUrl = new URL("../skills/", import.meta.url),
-): SkillManager {
+export type SkillLoader = (name: SkillName) => Promise<string>;
+
+export function createSkillManager(loadSkill: SkillLoader): SkillManager {
 	return {
 		selectSkill(question) {
 			const normalized = question.toLowerCase();
@@ -41,13 +41,6 @@ export function createSkillManager(
 				)?.name ?? "debugging"
 			);
 		},
-		async loadSkill(name) {
-			const file = Bun.file(new URL(`${name}.md`, baseUrl));
-			if (!(await file.exists())) {
-				throw new Error(`Skill not found: ${name}`);
-			}
-
-			return file.text();
-		},
+		loadSkill,
 	};
 }

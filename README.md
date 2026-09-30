@@ -40,8 +40,14 @@ Set these values in `.env.local`:
 ```dotenv
 TELEGRAM_BOT_TOKEN=replace-with-botfather-token
 TELEGRAM_WEBHOOK_SECRET=replace-with-a-random-secret
+TELEGRAM_ALLOWED_USER_IDS=123456789
 TELEGRAM_API_BASE_URL=https://api.telegram.org
 ```
+
+Telegram access is deny-by-default. Send `/whoami` to the bot to see your own
+Telegram user ID, then add that numeric ID to `TELEGRAM_ALLOWED_USER_IDS`.
+Separate multiple IDs with commas. Unauthorized users receive only their own ID;
+their messages never reach session memory, OpenAI, or GitHub.
 
 Expose the server over HTTPS, then register the webhook. Telegram accepts only `A-Z`, `a-z`, `0-9`, `_`, and `-` in the webhook secret.
 
@@ -82,6 +88,37 @@ LINE_API_BASE_URL=https://api.line.me
 ```
 
 Set the Messaging API webhook URL to `https://agent.example.com/line/webhook`. The implementation uses the one-time reply token and does not automatically fall back to a quota-consuming push message.
+
+## Cloudflare Worker deployment
+
+The production Worker is configured in `wrangler.jsonc` with:
+
+- Custom Domain: `https://agent.pakzartl.xyz`
+- Worker name: `poc-line-agent`
+- KV-backed session memory through the `SESSION_MEMORY` binding
+- Workers logs and sampled traces enabled
+
+Authenticate, generate binding types, validate the bundle, and deploy:
+
+```sh
+bunx wrangler login --use-keyring
+bun run worker:types
+bun run typecheck:worker
+bun run worker:dry-run
+bun run worker:deploy
+```
+
+Upload secrets with `wrangler secret put` or `wrangler secret bulk`; never add their values to `wrangler.jsonc`. The required production secrets are:
+
+- `LINE_CHANNEL_SECRET`
+- `LINE_CHANNEL_ACCESS_TOKEN`
+- `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_WEBHOOK_SECRET`
+- `TELEGRAM_ALLOWED_USER_IDS`
+- `OPENAI_API_KEY`
+- `GITHUB_TOKEN`
+
+After deployment, register `https://agent.pakzartl.xyz/telegram/webhook` with Telegram and `https://agent.pakzartl.xyz/line/webhook` with LINE. LINE also requires **Use webhook** to be enabled in the Messaging API channel settings.
 
 ## Local sandbox
 
@@ -134,10 +171,9 @@ Defaults:
 - `OPENAI_BASE_URL` defaults to `https://api.openai.com/v1`. For OpenRouter, use `https://openrouter.ai/api/v1` and an OpenRouter model slug.
 - `OPENAI_MODEL` defaults to `gpt-5.4-mini`.
 - `OPENAI_MAX_TOOL_ROUNDS` defaults to `6`.
-- `GITHUB_OWNER`
-- `GITHUB_REPO`
 - `GITHUB_TOKEN` with read-only repository contents/search access.
-- `GITHUB_REF` defaults to `main`.
+- `TELEGRAM_ALLOWED_USER_IDS` is a comma-separated allowlist of numeric Telegram
+  user IDs. An empty list denies all agent access except `/whoami`.
 - `SESSION_MEMORY_DIR` defaults to `.sessions`.
 - `SESSION_MEMORY_MAX_MESSAGES` defaults to `12` messages (six user/assistant turns).
 
@@ -155,10 +191,14 @@ Included skills:
 
 The model can request:
 
-- `search_code(query)`
-- `read_file(path)`
-- `get_commit(sha)`
+- `list_repositories()`
+- `github_get(path)` for allowlisted GitHub REST GET endpoints
+- `search_code(repository, query)`
+- `read_file(repository, path)`
+- `get_commit(repository, sha)`
 
-All GitHub requests are made by the backend. Tokens are never included in model input or chat replies.
+All GitHub requests are made by the backend with HTTP `GET` only. External URLs,
+redirects, and mutation tools are blocked. Tokens are never included in model
+input or chat replies.
 
 Responses are sent with `store: false`; only bounded tool output is returned to the model.

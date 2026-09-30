@@ -1,7 +1,7 @@
-import { startLineAgentServer } from "./app";
+import { startLineAgentServer } from "./bun-server";
 import { loadConfig, validateConfig } from "./config";
 
-const config = loadConfig();
+const config = loadConfig(process.env);
 validateConfig(config);
 const server = startLineAgentServer(config);
 

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { startLineAgentServer } from "../app";
+import { startLineAgentServer } from "../bun-server";
 import { loadConfig } from "../config";
 import { createWhatsAppSignature } from "../whatsapp/signature";
 import { createSandboxMockHandler, createSandboxState } from "./mock-services";
@@ -82,7 +82,7 @@ describe("local sandbox full loop", () => {
 		).toBe(true);
 		expect(
 			result.githubRequests.includes(
-				"/github/repos/sandbox/repo/contents/src/auth/login.ts?ref=main",
+				"/github/repos/sandbox/repo/contents/src/auth/login.ts",
 			),
 		).toBe(true);
 		expect(result.lineReplies).toHaveLength(1);
@@ -110,6 +110,7 @@ describe("local sandbox full loop", () => {
 			PORT: "0",
 			TELEGRAM_BOT_TOKEN: "telegram-token",
 			TELEGRAM_WEBHOOK_SECRET: "telegram-secret",
+			TELEGRAM_ALLOWED_USER_IDS: "1001",
 			TELEGRAM_API_BASE_URL: `${mockOrigin}/telegram`,
 			OPENAI_API_KEY: "openai-key",
 			OPENAI_BASE_URL: `${mockOrigin}/openai`,
@@ -133,6 +134,7 @@ describe("local sandbox full loop", () => {
 				message: {
 					message_id: 42,
 					text: "why does login fail?",
+					from: { id: 1001 },
 					chat: { id: 1001 },
 				},
 			}),
@@ -141,7 +143,7 @@ describe("local sandbox full loop", () => {
 		expect(response.status).toBe(200);
 		expect(state.responsesRequests).toHaveLength(3);
 		expect(state.githubRequests).toContain(
-			"/github/repos/sandbox/repo/contents/src/auth/login.ts?ref=main",
+			"/github/repos/sandbox/repo/contents/src/auth/login.ts",
 		);
 		expect(state.telegramReplies).toHaveLength(1);
 		expect(state.telegramReplies[0]).toMatchObject({
@@ -216,7 +218,7 @@ describe("local sandbox full loop", () => {
 		expect(response.status).toBe(200);
 		expect(state.responsesRequests).toHaveLength(3);
 		expect(state.githubRequests).toContain(
-			"/github/repos/sandbox/repo/contents/src/auth/login.ts?ref=main",
+			"/github/repos/sandbox/repo/contents/src/auth/login.ts",
 		);
 		expect(state.whatsAppReplies).toHaveLength(1);
 		expect(state.whatsAppReplies[0]).toMatchObject({

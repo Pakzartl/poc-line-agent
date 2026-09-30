@@ -3,6 +3,47 @@ import { loadConfig } from "../config";
 import { createGitHubTools } from "./github";
 
 describe("GitHub tools", () => {
+	test("lists repositories available to the token with bounded metadata", async () => {
+		let request: Request | undefined;
+		const tools = createGitHubTools({
+			config: loadConfig({ GITHUB_TOKEN: "secret-token" }).github,
+			fetch: async (input, init) => {
+				request = new Request(input, init);
+				return Response.json([
+					{
+						full_name: "acme/api",
+						private: true,
+						description: "API",
+						default_branch: "main",
+						html_url: "https://github.test/acme/api",
+					},
+				]);
+			},
+		});
+
+		const result = await tools
+			.find((tool) => tool.definition.name === "list_repositories")
+			?.run("{}");
+
+		expect(request?.method).toBe("GET");
+		expect(request?.url).toContain("/user/repos?");
+		expect(result).toEqual({
+			ok: true,
+			data: {
+				repositories: [
+					{
+						name: "acme/api",
+						private: true,
+						description: "API",
+						defaultBranch: "main",
+						archived: false,
+						url: "https://github.test/acme/api",
+					},
+				],
+			},
+		});
+	});
+
 	test("search_code uses GitHub code search without exposing the token", async () => {
 		const requestedHeaders: HeadersInit[] = [];
 		const tools = createGitHubTools({
@@ -23,11 +64,12 @@ describe("GitHub tools", () => {
 
 		const result = await tools
 			.find((tool) => tool.definition.name === "search_code")
-			?.run('{"query":"login"}');
+			?.run('{"repository":"superset/repo","query":"login"}');
 
 		expect(result).toEqual({
 			ok: true,
 			data: {
+				repository: "superset/repo",
 				files: [{ path: "src/auth/login.ts", url: "https://github.test/file" }],
 			},
 		});
@@ -53,10 +95,47 @@ describe("GitHub tools", () => {
 
 		const result = await tools
 			.find((tool) => tool.definition.name === "read_file")
-			?.run('{"path":"src/large.ts"}');
+			?.run('{"repository":"superset/repo","path":"src/large.ts"}');
 
 		expect(result?.ok).toBe(true);
 		expect(JSON.stringify(result?.data).length).toBeLessThan(21_000);
 		expect(JSON.stringify(result?.data)).toContain("[truncated]");
+	});
+
+	test("generic reads are GET-only and reject non-allowlisted paths", async () => {
+		let method: string | undefined;
+		const tools = createGitHubTools({
+			config: loadConfig({ GITHUB_TOKEN: "secret-token" }).github,
+			fetch: async (_input, init) => {
+				method = init?.method;
+				return Response.json({ default_branch: "main" });
+			},
+		});
+		const githubGet = tools.find(
+			(tool) => tool.definition.name === "github_get",
+		);
+
+		expect(await githubGet?.run('{"path":"/repos/acme/api/branches"}')).toEqual(
+			{ ok: true, data: { default_branch: "main" } },
+		);
+		expect(method).toBe("GET");
+		await expect(
+			githubGet?.run('{"path":"https://example.com/private"}') ??
+				Promise.resolve(),
+		).rejects.toThrow("invalid GitHub GET path");
+	});
+
+	test("does not expose mutation tools", () => {
+		const names = createGitHubTools({
+			config: loadConfig({ GITHUB_TOKEN: "secret-token" }).github,
+		}).map((tool) => tool.definition.name);
+
+		expect(names).toEqual([
+			"list_repositories",
+			"github_get",
+			"search_code",
+			"read_file",
+			"get_commit",
+		]);
 	});
 });

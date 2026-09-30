@@ -1,10 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentOrchestrator } from "../agent/orchestrator";
 import { loadConfig } from "../config";
-import type {
-	ConversationMessage,
-	SessionMemoryStore,
-} from "../memory/session-memory";
+import type { ConversationMessage, SessionMemoryStore } from "../memory/types";
 import type { LineReplyClient } from "./reply";
 import { createLineSignature } from "./signature";
 import { extractTextEvents, handleLineWebhook } from "./webhook";

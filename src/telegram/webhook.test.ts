@@ -1,10 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentOrchestrator } from "../agent/orchestrator";
 import { loadConfig } from "../config";
-import type {
-	ConversationMessage,
-	SessionMemoryStore,
-} from "../memory/session-memory";
+import type { ConversationMessage, SessionMemoryStore } from "../memory/types";
 import { createTelegramReplyClient } from "./reply";
 import { handleTelegramWebhook } from "./webhook";
 
@@ -13,6 +10,7 @@ describe("Telegram webhook", () => {
 		const config = loadConfig({
 			TELEGRAM_BOT_TOKEN: "bot-token",
 			TELEGRAM_WEBHOOK_SECRET: "webhook-secret",
+			TELEGRAM_ALLOWED_USER_IDS: "9001",
 		});
 		const history: ConversationMessage[] = [
 			{ role: "user", content: "find login" },
@@ -50,6 +48,7 @@ describe("Telegram webhook", () => {
 					message: {
 						message_id: 42,
 						text: "what was its commit?",
+						from: { id: 9001 },
 						chat: { id: -1001 },
 					},
 				}),
@@ -70,6 +69,80 @@ describe("Telegram webhook", () => {
 		expect(seenHistory).toEqual([history]);
 		expect(sessionIds).toEqual(["telegram:chat:-1001", "telegram:chat:-1001"]);
 		expect(replies).toEqual([[-1001, "commit abc123", 42]]);
+	});
+
+	test("denies users outside the allowlist before memory or the agent", async () => {
+		const config = loadConfig({
+			TELEGRAM_BOT_TOKEN: "bot-token",
+			TELEGRAM_WEBHOOK_SECRET: "webhook-secret",
+			TELEGRAM_ALLOWED_USER_IDS: "9001",
+		});
+		let agentCalls = 0;
+		let memoryCalls = 0;
+		const replies: unknown[][] = [];
+
+		const response = await handleTelegramWebhook(
+			telegramRequest({ text: "list repositories", userId: 777, chatId: 777 }),
+			{
+				config,
+				orchestrator: {
+					answer: async () => {
+						agentCalls += 1;
+						return "unused";
+					},
+				},
+				memoryStore: trackingMemoryStore(() => {
+					memoryCalls += 1;
+				}),
+				telegramReplyClient: {
+					reply: async (...args) => {
+						replies.push(args);
+					},
+				},
+			},
+		);
+
+		expect(response.status).toBe(200);
+		expect(agentCalls).toBe(0);
+		expect(memoryCalls).toBe(0);
+		expect(replies).toEqual([
+			[777, "Access denied. Your Telegram user ID is: 777", 42],
+		]);
+	});
+
+	test("returns the sender ID for /whoami without using memory or the agent", async () => {
+		const config = loadConfig({
+			TELEGRAM_BOT_TOKEN: "bot-token",
+			TELEGRAM_WEBHOOK_SECRET: "webhook-secret",
+		});
+		let agentCalls = 0;
+		let memoryCalls = 0;
+		const replies: unknown[][] = [];
+
+		await handleTelegramWebhook(
+			telegramRequest({ text: "/whoami", userId: 8123, chatId: 8123 }),
+			{
+				config,
+				orchestrator: {
+					answer: async () => {
+						agentCalls += 1;
+						return "unused";
+					},
+				},
+				memoryStore: trackingMemoryStore(() => {
+					memoryCalls += 1;
+				}),
+				telegramReplyClient: {
+					reply: async (...args) => {
+						replies.push(args);
+					},
+				},
+			},
+		);
+
+		expect(agentCalls).toBe(0);
+		expect(memoryCalls).toBe(0);
+		expect(replies).toEqual([[8123, "Your Telegram user ID is: 8123", 42]]);
 	});
 
 	test("rejects a missing or invalid webhook secret", async () => {
@@ -125,5 +198,43 @@ function emptyMemoryStore(): SessionMemoryStore {
 		read: async () => [],
 		append: async (_sessionId, messages) => messages,
 		clear: async () => undefined,
+	};
+}
+
+function telegramRequest(input: {
+	text: string;
+	userId: number;
+	chatId: number;
+}): Request {
+	return new Request("http://localhost/telegram/webhook", {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+			"X-Telegram-Bot-Api-Secret-Token": "webhook-secret",
+		},
+		body: JSON.stringify({
+			message: {
+				message_id: 42,
+				text: input.text,
+				from: { id: input.userId },
+				chat: { id: input.chatId },
+			},
+		}),
+	});
+}
+
+function trackingMemoryStore(onCall: () => void): SessionMemoryStore {
+	return {
+		read: async () => {
+			onCall();
+			return [];
+		},
+		append: async (_sessionId, messages) => {
+			onCall();
+			return messages;
+		},
+		clear: async () => {
+			onCall();
+		},
 	};
 }

@@ -1,0 +1,16 @@
+{
+	"extends": "./tsconfig.json",
+	"compilerOptions": {
+		"types": ["@cloudflare/workers-types", "bun"]
+	},
+	"include": ["src/worker.ts", "worker-configuration.d.ts"],
+	"exclude": [
+		"src/**/*.test.ts",
+		"src/agent/bun-skill-loader.ts",
+		"src/bun-server.ts",
+		"src/index.ts",
+		"src/memory/session-memory.ts",
+		"src/sandbox.ts",
+		"src/sandbox/**"
+	]
+}

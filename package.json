@@ -9,9 +9,14 @@
 		"sandbox:live": "bun run --env-file=.env.local src/sandbox.ts --live",
 		"start": "bun run src/index.ts",
 		"typecheck": "tsc --noEmit --emitDeclarationOnly false",
+		"typecheck:worker": "tsc -p tsconfig.worker.json --noEmit --emitDeclarationOnly false",
 		"test": "bun test",
 		"test:sandbox": "bun test src/sandbox/full-loop.test.ts",
-		"format:check": "biome format ."
+		"format:check": "biome format package.json tsconfig.json tsconfig.worker.json wrangler.jsonc README.md src",
+		"worker:types": "wrangler types worker-configuration.d.ts --include-runtime=false --strict-vars=false",
+		"worker:dev": "wrangler dev",
+		"worker:dry-run": "wrangler deploy --dry-run",
+		"worker:deploy": "wrangler deploy"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.4.2",

@@ -28,9 +28,14 @@ describe("config validation", () => {
 					...shared,
 					TELEGRAM_BOT_TOKEN: "bot-token",
 					TELEGRAM_WEBHOOK_SECRET: "webhook-secret",
+					TELEGRAM_ALLOWED_USER_IDS: "123, 456",
 				}),
 			),
 		).not.toThrow();
+		expect(
+			loadConfig({ TELEGRAM_ALLOWED_USER_IDS: "123, 456" }).telegram
+				.allowedUserIds,
+		).toEqual(["123", "456"]);
 		expect(() =>
 			validateConfig(
 				loadConfig({
@@ -68,6 +73,13 @@ describe("config validation", () => {
 			),
 		).toThrow(
 			"SESSION_MEMORY_MAX_MESSAGES must be an integer between 2 and 100",
+		);
+		expect(() =>
+			validateConfig(
+				loadConfig({ ...validEnv, TELEGRAM_ALLOWED_USER_IDS: "123, nope" }),
+			),
+		).toThrow(
+			"TELEGRAM_ALLOWED_USER_IDS must contain comma-separated positive integers",
 		);
 	});
 });

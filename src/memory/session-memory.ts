@@ -1,20 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-
-export type ConversationMessage = {
-	role: "user" | "assistant";
-	content: string;
-};
-
-export type SessionMemoryStore = {
-	read(sessionId: string): Promise<ConversationMessage[]>;
-	append(
-		sessionId: string,
-		messages: ConversationMessage[],
-	): Promise<ConversationMessage[]>;
-	clear(sessionId: string): Promise<void>;
-};
+import type { ConversationMessage, SessionMemoryStore } from "./types";
 
 export type SessionMemoryOptions = {
 	directory: string;

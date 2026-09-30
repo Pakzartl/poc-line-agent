@@ -8,6 +8,7 @@ export type AppConfig = {
 	telegram: {
 		botToken: string;
 		webhookSecret: string;
+		allowedUserIds: readonly string[];
 		apiBaseUrl: string;
 	};
 	whatsapp: {
@@ -41,7 +42,9 @@ const defaultLineApiBaseUrl = "https://api.line.me";
 const defaultTelegramApiBaseUrl = "https://api.telegram.org";
 const defaultWhatsAppApiBaseUrl = "https://graph.facebook.com/v26.0";
 
-export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
+export type ConfigEnvironment = Readonly<Record<string, string | undefined>>;
+
+export function loadConfig(env: ConfigEnvironment): AppConfig {
 	return {
 		port: Number(env.PORT ?? "3000"),
 		line: {
@@ -54,6 +57,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
 		telegram: {
 			botToken: env.TELEGRAM_BOT_TOKEN ?? "",
 			webhookSecret: env.TELEGRAM_WEBHOOK_SECRET ?? "",
+			allowedUserIds: parseList(env.TELEGRAM_ALLOWED_USER_IDS),
 			apiBaseUrl: stripTrailingSlash(
 				env.TELEGRAM_API_BASE_URL ?? defaultTelegramApiBaseUrl,
 			),
@@ -93,8 +97,6 @@ export function validateConfig(config: AppConfig): void {
 	const requiredValues = [
 		["OPENAI_API_KEY", config.llm.apiKey],
 		["OPENAI_MODEL", config.llm.model],
-		["GITHUB_OWNER", config.github.owner],
-		["GITHUB_REPO", config.github.repo],
 		["GITHUB_TOKEN", config.github.token],
 	] as const;
 	const missing = requiredValues
@@ -156,6 +158,15 @@ export function validateConfig(config: AppConfig): void {
 		);
 	}
 
+	const invalidTelegramUserIds = config.telegram.allowedUserIds.filter(
+		(userId) => !/^[1-9]\d{0,19}$/.test(userId),
+	);
+	if (invalidTelegramUserIds.length > 0) {
+		throw new Error(
+			"TELEGRAM_ALLOWED_USER_IDS must contain comma-separated positive integers",
+		);
+	}
+
 	if (
 		!Number.isInteger(config.port) ||
 		config.port < 1 ||
@@ -205,4 +216,11 @@ export function validateConfig(config: AppConfig): void {
 
 function stripTrailingSlash(value: string): string {
 	return value.replace(/\/+$/, "");
+}
+
+function parseList(value: string | undefined): string[] {
+	return (value ?? "")
+		.split(/[\s,]+/)
+		.map((item) => item.trim())
+		.filter(Boolean);
 }
