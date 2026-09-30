@@ -75,7 +75,7 @@ export function loadConfig(env: ConfigEnvironment): AppConfig {
 			apiKey: env.OPENAI_API_KEY ?? "",
 			baseUrl: stripTrailingSlash(env.OPENAI_BASE_URL ?? defaultOpenAiBaseUrl),
 			model: env.OPENAI_MODEL ?? "gpt-5.4-mini",
-			maxToolRounds: Number(env.OPENAI_MAX_TOOL_ROUNDS ?? "6"),
+			maxToolRounds: Number(env.OPENAI_MAX_TOOL_ROUNDS ?? "20"),
 		},
 		github: {
 			owner: env.GITHUB_OWNER ?? "",

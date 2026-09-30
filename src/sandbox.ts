@@ -51,7 +51,7 @@ const config =
 				OPENAI_API_KEY: "sandbox-openai-key",
 				OPENAI_BASE_URL: `${mockOrigin}/openai`,
 				OPENAI_MODEL: "sandbox-model",
-				OPENAI_MAX_TOOL_ROUNDS: process.env.OPENAI_MAX_TOOL_ROUNDS ?? "6",
+				OPENAI_MAX_TOOL_ROUNDS: process.env.OPENAI_MAX_TOOL_ROUNDS ?? "20",
 				GITHUB_OWNER: "sandbox",
 				GITHUB_REPO: "repo",
 				GITHUB_TOKEN: "sandbox-github-token",

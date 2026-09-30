@@ -12,7 +12,9 @@ const validEnv = {
 
 describe("config validation", () => {
 	test("accepts the documented defaults", () => {
-		expect(() => validateConfig(loadConfig(validEnv))).not.toThrow();
+		const config = loadConfig(validEnv);
+		expect(config.llm.maxToolRounds).toBe(20);
+		expect(() => validateConfig(config)).not.toThrow();
 	});
 
 	test("accepts Telegram or WhatsApp without LINE credentials", () => {
