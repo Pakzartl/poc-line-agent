@@ -1,0 +1,64 @@
+{
+	"$schema": "./node_modules/wrangler/config-schema.json",
+	"name": "poc-line-agent",
+	"main": "src/worker.ts",
+	"compatibility_date": "2026-09-30",
+	"compatibility_flags": ["nodejs_compat"],
+	"workers_dev": false,
+	"preview_urls": false,
+	"routes": [
+		{
+			"pattern": "agent.pakzartl.xyz",
+			"custom_domain": true
+		}
+	],
+	"rules": [
+		{
+			"type": "Text",
+			"globs": ["**/*.md"],
+			"fallthrough": true
+		}
+	],
+	"kv_namespaces": [
+		{
+			"binding": "SESSION_MEMORY"
+		}
+	],
+	"secrets": {
+		"required": [
+			"LINE_CHANNEL_SECRET",
+			"LINE_CHANNEL_ACCESS_TOKEN",
+			"TELEGRAM_BOT_TOKEN",
+			"TELEGRAM_WEBHOOK_SECRET",
+			"TELEGRAM_ALLOWED_USER_IDS",
+			"OPENAI_API_KEY",
+			"GITHUB_TOKEN"
+		]
+	},
+	"vars": {
+		"LINE_API_BASE_URL": "https://api.line.me",
+		"TELEGRAM_API_BASE_URL": "https://api.telegram.org",
+		"WHATSAPP_API_BASE_URL": "https://graph.facebook.com/v26.0",
+		"WHATSAPP_ACCESS_TOKEN": "",
+		"WHATSAPP_PHONE_NUMBER_ID": "",
+		"WHATSAPP_VERIFY_TOKEN": "",
+		"WHATSAPP_APP_SECRET": "",
+		"OPENAI_BASE_URL": "https://api.openai.com/v1",
+		"OPENAI_MODEL": "gpt-6-luna",
+		"OPENAI_MAX_TOOL_ROUNDS": "6",
+		"GITHUB_API_BASE_URL": "https://api.github.com",
+		"SESSION_MEMORY_MAX_MESSAGES": "12"
+	},
+	"observability": {
+		"enabled": true,
+		"redact_query_string": true,
+		"logs": {
+			"enabled": true,
+			"head_sampling_rate": 1
+		},
+		"traces": {
+			"enabled": true,
+			"head_sampling_rate": 0.01
+		}
+	}
+}

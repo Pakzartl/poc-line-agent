@@ -3,7 +3,7 @@ import type { ResponsesClient, ResponsesInputItem } from "./llm-client";
 import { extractFunctionCalls, extractOutputText } from "./llm-client";
 import type { SkillManager } from "./skill-manager";
 import type { ToolRunner } from "./tool-runner";
-import type { ConversationMessage } from "../memory/session-memory";
+import type { ConversationMessage } from "../memory/types";
 
 export type AgentOrchestrator = {
 	answer(question: string, history?: ConversationMessage[]): Promise<string>;

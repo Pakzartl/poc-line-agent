@@ -119,7 +119,10 @@ async function handleOpenAiResponses(
 					type: "function_call",
 					call_id: "call-search-code",
 					name: "search_code",
-					arguments: JSON.stringify({ query: "login error" }),
+					arguments: JSON.stringify({
+						repository: "sandbox/repo",
+						query: "login error",
+					}),
 				},
 			],
 		});
@@ -133,7 +136,10 @@ async function handleOpenAiResponses(
 					type: "function_call",
 					call_id: "call-read-file",
 					name: "read_file",
-					arguments: JSON.stringify({ path: "src/auth/login.ts" }),
+					arguments: JSON.stringify({
+						repository: "sandbox/repo",
+						path: "src/auth/login.ts",
+					}),
 				},
 			],
 		});

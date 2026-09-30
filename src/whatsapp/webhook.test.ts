@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { loadConfig } from "../config";
-import type { SessionMemoryStore } from "../memory/session-memory";
+import type { SessionMemoryStore } from "../memory/types";
 import { createWhatsAppReplyClient } from "./reply";
 import { createWhatsAppSignature } from "./signature";
 import { handleWhatsAppVerification, handleWhatsAppWebhook } from "./webhook";

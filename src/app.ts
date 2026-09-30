@@ -1,14 +1,11 @@
 import { createAgentOrchestrator } from "./agent/orchestrator";
 import { createResponsesClient } from "./agent/llm-client";
-import { createSkillManager } from "./agent/skill-manager";
+import type { SkillManager } from "./agent/skill-manager";
 import { createToolRunner } from "./agent/tool-runner";
 import type { AppConfig } from "./config";
 import { createLineReplyClient } from "./line/reply";
 import { handleLineWebhook } from "./line/webhook";
-import {
-	createSessionMemoryStore,
-	type SessionMemoryStore,
-} from "./memory/session-memory";
+import type { SessionMemoryStore } from "./memory/types";
 import { createTelegramReplyClient } from "./telegram/reply";
 import { handleTelegramWebhook } from "./telegram/webhook";
 import { createGitHubTools } from "./tools/github";
@@ -27,22 +24,22 @@ export type AppDeps = {
 	memoryStore: SessionMemoryStore;
 };
 
-export type AppRuntimeOptions = {
-	hostname?: string;
+export type AppDepsOptions = {
 	fetch?: typeof fetch;
-	memoryStore?: SessionMemoryStore;
+	memoryStore: SessionMemoryStore;
+	skillManager: SkillManager;
 };
 
 export function createAppDeps(
 	config: AppConfig,
-	options: Pick<AppRuntimeOptions, "fetch" | "memoryStore"> = {},
+	options: AppDepsOptions,
 ): AppDeps {
 	const fetchImpl = options.fetch ?? fetch;
 	const toolRunner = createToolRunner(
 		createGitHubTools({ config: config.github, fetch: fetchImpl }),
 	);
 	const orchestrator = createAgentOrchestrator({
-		skillManager: createSkillManager(),
+		skillManager: options.skillManager,
 		responsesClient: createResponsesClient(config, fetchImpl),
 		toolRunner,
 		maxToolRounds: config.llm.maxToolRounds,
@@ -63,20 +60,13 @@ export function createAppDeps(
 		apiBaseUrl: config.whatsapp.apiBaseUrl,
 		fetch: fetchImpl,
 	});
-	const memoryStore =
-		options.memoryStore ??
-		createSessionMemoryStore({
-			directory: config.memory.directory,
-			maxMessages: config.memory.maxMessages,
-		});
-
 	return {
 		config,
 		orchestrator,
 		lineReplyClient,
 		telegramReplyClient,
 		whatsAppReplyClient,
-		memoryStore,
+		memoryStore: options.memoryStore,
 	};
 }
 
@@ -85,6 +75,18 @@ export function createAppHandler(
 ): (request: Request) => Promise<Response> {
 	return async (request) => {
 		const url = new URL(request.url);
+
+		if (request.method === "GET" && url.pathname === "/") {
+			return new Response(statusPage, {
+				headers: {
+					"Cache-Control": "no-store",
+					"Content-Security-Policy":
+						"default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'",
+					"Content-Type": "text/html; charset=utf-8",
+					"X-Content-Type-Options": "nosniff",
+				},
+			});
+		}
 
 		if (request.method === "GET" && url.pathname === "/health") {
 			return Response.json({ ok: true });
@@ -124,6 +126,33 @@ export function createAppHandler(
 	};
 }
 
+const statusPage = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Messaging Agent</title>
+  <style>
+    :root { color-scheme: dark; font-family: ui-sans-serif, system-ui, sans-serif; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #0b1220; color: #e5eefc; }
+    main { width: min(560px, calc(100% - 48px)); padding: 32px; border: 1px solid #24324a; border-radius: 18px; background: #111b2d; box-shadow: 0 20px 60px #0006; }
+    h1 { margin: 0 0 10px; font-size: 28px; }
+    p { color: #9fb0c9; line-height: 1.6; }
+    .status { display: inline-flex; gap: 8px; align-items: center; color: #86efac; font-weight: 700; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 18px #22c55e; }
+    code { color: #bfdbfe; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="status"><span class="dot"></span>Operational</div>
+    <h1>Messaging Agent</h1>
+    <p>The Cloudflare Worker is running. Provider webhooks are authenticated and Telegram agent access is restricted by user ID.</p>
+    <p>Health check: <code>/health</code></p>
+  </main>
+</body>
+</html>`;
+
 function isLineConfigured(config: AppConfig): boolean {
 	return Boolean(config.line.channelSecret && config.line.channelAccessToken);
 }
@@ -139,15 +168,4 @@ function isWhatsAppConfigured(config: AppConfig): boolean {
 			config.whatsapp.verifyToken &&
 			config.whatsapp.appSecret,
 	);
-}
-
-export function startLineAgentServer(
-	config: AppConfig,
-	options: AppRuntimeOptions = {},
-): Bun.Server<undefined> {
-	return Bun.serve({
-		hostname: options.hostname,
-		port: config.port,
-		fetch: createAppHandler(createAppDeps(config, options)),
-	});
 }

@@ -1,7 +1,7 @@
 import type { AgentOrchestrator } from "../agent/orchestrator";
 import { answerConversation } from "../agent/conversation";
 import type { AppConfig } from "../config";
-import type { SessionMemoryStore } from "../memory/session-memory";
+import type { SessionMemoryStore } from "../memory/types";
 import type { WhatsAppReplyClient } from "./reply";
 import { verifyWhatsAppSignature } from "./signature";
 

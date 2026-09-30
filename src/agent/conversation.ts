@@ -1,5 +1,5 @@
 import type { AgentOrchestrator } from "./orchestrator";
-import type { SessionMemoryStore } from "../memory/session-memory";
+import type { SessionMemoryStore } from "../memory/types";
 
 export type ConversationDeps = {
 	orchestrator: AgentOrchestrator;

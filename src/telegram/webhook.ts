@@ -2,14 +2,14 @@ import { timingSafeEqual } from "node:crypto";
 import type { AgentOrchestrator } from "../agent/orchestrator";
 import { answerConversation } from "../agent/conversation";
 import type { AppConfig } from "../config";
-import type { SessionMemoryStore } from "../memory/session-memory";
+import type { SessionMemoryStore } from "../memory/types";
 import type { TelegramReplyClient } from "./reply";
 
 type TelegramUpdate = {
 	message?: {
 		message_id?: number;
 		text?: string;
-		from?: { is_bot?: boolean };
+		from?: { id?: number | string; is_bot?: boolean };
 		chat?: { id?: number | string };
 	};
 };
@@ -45,12 +45,32 @@ export async function handleTelegramWebhook(
 	if (
 		!message?.text ||
 		message.chat?.id === undefined ||
+		message.from?.id === undefined ||
 		message.from?.is_bot
 	) {
 		return Response.json({ ok: true });
 	}
 
 	const chatId = message.chat.id;
+	const userId = String(message.from.id);
+	if (isWhoAmICommand(message.text)) {
+		await deps.telegramReplyClient.reply(
+			chatId,
+			`Your Telegram user ID is: ${userId}`,
+			message.message_id,
+		);
+		return Response.json({ ok: true });
+	}
+
+	if (!deps.config.telegram.allowedUserIds.includes(userId)) {
+		await deps.telegramReplyClient.reply(
+			chatId,
+			`Access denied. Your Telegram user ID is: ${userId}`,
+			message.message_id,
+		);
+		return Response.json({ ok: true });
+	}
+
 	const answer = await answerConversation(
 		{
 			question: message.text,
@@ -61,6 +81,10 @@ export async function handleTelegramWebhook(
 	await deps.telegramReplyClient.reply(chatId, answer, message.message_id);
 
 	return Response.json({ ok: true });
+}
+
+function isWhoAmICommand(text: string): boolean {
+	return /^\/whoami(?:@\w+)?(?:\s|$)/i.test(text.trim());
 }
 
 function secretsMatch(received: string | null, expected: string): boolean {

@@ -1,4 +1,4 @@
-import { startLineAgentServer } from "./app";
+import { startLineAgentServer } from "./bun-server";
 import { loadConfig, validateConfig } from "./config";
 import { createSessionMemoryStore } from "./memory/session-memory";
 import {
