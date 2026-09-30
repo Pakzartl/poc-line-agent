@@ -1,3 +1,5 @@
+import { formatTelegramMessage, limitTelegramText } from "./format";
+
 export type TelegramReplyClient = {
 	reply(
 		chatId: number | string,
@@ -20,28 +22,35 @@ export function createTelegramReplyClient(options: {
 				throw new Error("TELEGRAM_BOT_TOKEN is required");
 			}
 
-			const response = await fetchImpl(
-				`${apiBaseUrl}/bot${options.botToken}/sendMessage`,
-				{
+			const message = formatTelegramMessage(text);
+			let response = await sendMessage(message.html, "HTML");
+			if (response.status === 400) {
+				response = await sendMessage(message.plainText);
+			}
+
+			if (!response.ok) {
+				throw new Error(`Telegram reply failed with status ${response.status}`);
+			}
+
+			async function sendMessage(
+				messageText: string,
+				parseMode?: "HTML",
+			): Promise<Response> {
+				return fetchImpl(`${apiBaseUrl}/bot${options.botToken}/sendMessage`, {
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
 					body: JSON.stringify({
 						chat_id: chatId,
-						text: limitTelegramText(text),
+						text: messageText,
+						...(parseMode ? { parse_mode: parseMode } : {}),
 						...(messageId
 							? { reply_parameters: { message_id: messageId } }
 							: {}),
 					}),
-				},
-			);
-
-			if (!response.ok) {
-				throw new Error(`Telegram reply failed with status ${response.status}`);
+				});
 			}
 		},
 	};
 }
 
-export function limitTelegramText(text: string): string {
-	return text.length <= 4_096 ? text : `${text.slice(0, 4_046)}\n\n[truncated]`;
-}
+export { limitTelegramText };

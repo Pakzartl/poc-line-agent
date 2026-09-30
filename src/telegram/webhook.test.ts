@@ -188,8 +188,43 @@ describe("Telegram webhook", () => {
 		expect(await request?.json()).toEqual({
 			chat_id: "chat-1",
 			text: "hello",
+			parse_mode: "HTML",
 			reply_parameters: { message_id: 7 },
 		});
+	});
+
+	test("falls back to readable plain text when Telegram rejects formatting", async () => {
+		const bodies: Record<string, unknown>[] = [];
+		const client = createTelegramReplyClient({
+			botToken: "secret-bot-token",
+			apiBaseUrl: "https://telegram.example",
+			fetch: Object.assign(
+				async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+					const request = new Request(input, init);
+					bodies.push((await request.json()) as Record<string, unknown>);
+					return bodies.length === 1
+						? Response.json({ ok: false }, { status: 400 })
+						: Response.json({ ok: true });
+				},
+				{ preconnect: fetch.preconnect },
+			),
+		});
+
+		await client.reply("chat-1", "# Title\n**Bold** and `code`", 7);
+
+		expect(bodies).toEqual([
+			{
+				chat_id: "chat-1",
+				text: "<b>Title</b>\n<b>Bold</b> and <code>code</code>",
+				parse_mode: "HTML",
+				reply_parameters: { message_id: 7 },
+			},
+			{
+				chat_id: "chat-1",
+				text: "Title\nBold and code",
+				reply_parameters: { message_id: 7 },
+			},
+		]);
 	});
 });
 
