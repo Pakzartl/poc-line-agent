@@ -1,15 +1,49 @@
-import architectureSkill from "./skills/architecture.md";
-import codeReviewSkill from "./skills/code-review.md";
-import debuggingSkill from "./skills/debugging.md";
+import apiCatalogSkill from "./skills/api-catalog.md";
+import architectureMapSkill from "./skills/architecture-map.md";
+import bugInvestigatorSkill from "./skills/bug-investigator.md";
+import commitReviewSkill from "./skills/commit-review.md";
+import configExplainerSkill from "./skills/config-explainer.md";
+import databaseMapSkill from "./skills/database-map.md";
+import dependencyCheckSkill from "./skills/dependency-check.md";
+import explainCodeSkill from "./skills/explain-code.md";
+import findCodeSkill from "./skills/find-code.md";
+import incidentTriageSkill from "./skills/incident-triage.md";
+import missingTestsSkill from "./skills/missing-tests.md";
+import onboardingGuideSkill from "./skills/onboarding-guide.md";
+import prReviewSkill from "./skills/pr-review.md";
+import recentChangesSkill from "./skills/recent-changes.md";
+import releaseSummarySkill from "./skills/release-summary.md";
+import repoOverviewSkill from "./skills/repo-overview.md";
+import repoComparisonSkill from "./skills/repo-comparison.md";
+import securityReviewSkill from "./skills/security-review.md";
+import testFinderSkill from "./skills/test-finder.md";
+import traceFeatureSkill from "./skills/trace-feature.md";
 import { createSkillManager, type SkillName } from "./agent/skill-manager";
 import { createAppDeps, createAppHandler } from "./app";
 import { loadConfig, validateConfig } from "./config";
 import { createKvSessionMemoryStore } from "./memory/kv-session-memory";
 
 const skillDocuments: Readonly<Record<SkillName, string>> = {
-	architecture: architectureSkill,
-	"code-review": codeReviewSkill,
-	debugging: debuggingSkill,
+	"repo-overview": repoOverviewSkill,
+	"find-code": findCodeSkill,
+	"explain-code": explainCodeSkill,
+	"trace-feature": traceFeatureSkill,
+	"recent-changes": recentChangesSkill,
+	"commit-review": commitReviewSkill,
+	"pr-review": prReviewSkill,
+	"bug-investigator": bugInvestigatorSkill,
+	"test-finder": testFinderSkill,
+	"missing-tests": missingTestsSkill,
+	"dependency-check": dependencyCheckSkill,
+	"security-review": securityReviewSkill,
+	"config-explainer": configExplainerSkill,
+	"api-catalog": apiCatalogSkill,
+	"database-map": databaseMapSkill,
+	"architecture-map": architectureMapSkill,
+	"onboarding-guide": onboardingGuideSkill,
+	"release-summary": releaseSummarySkill,
+	"incident-triage": incidentTriageSkill,
+	"repo-comparison": repoComparisonSkill,
 };
 
 export default {

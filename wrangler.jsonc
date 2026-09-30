@@ -45,7 +45,7 @@
 		"WHATSAPP_APP_SECRET": "",
 		"OPENAI_BASE_URL": "https://api.openai.com/v1",
 		"OPENAI_MODEL": "gpt-6-luna",
-		"OPENAI_MAX_TOOL_ROUNDS": "6",
+		"OPENAI_MAX_TOOL_ROUNDS": "20",
 		"GITHUB_API_BASE_URL": "https://api.github.com",
 		"SESSION_MEMORY_MAX_MESSAGES": "12"
 	},

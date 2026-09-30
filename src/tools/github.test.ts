@@ -75,6 +75,9 @@ describe("GitHub tools", () => {
 		});
 		expect(JSON.stringify(result)).not.toContain("secret-token");
 		expect(JSON.stringify(requestedHeaders)).toContain("secret-token");
+		expect(new Headers(requestedHeaders[0]).get("user-agent")).toBe(
+			"poc-line-agent/0.1",
+		);
 	});
 
 	test("read_file limits large decoded content", async () => {

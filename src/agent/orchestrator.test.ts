@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { loadConfig } from "../config";
 import { createAgentOrchestrator } from "./orchestrator";
 import type { ResponsesClient, ResponsesInputItem } from "./llm-client";
 import type { SkillManager } from "./skill-manager";
@@ -41,8 +42,8 @@ describe("agent orchestrator", () => {
 			},
 		};
 		const skillManager: SkillManager = {
-			selectSkill: () => "debugging",
-			loadSkill: async () => "# Debugging",
+			selectSkill: () => "bug-investigator",
+			loadSkill: async () => "# Bug Investigator",
 		};
 		const toolRunner = createToolRunner([
 			{
@@ -89,5 +90,62 @@ describe("agent orchestrator", () => {
 				data: { files: ["src/auth/login.ts"] },
 			}),
 		});
+	});
+
+	test("allows a repository analysis to complete after eight tool calls", async () => {
+		let responseCount = 0;
+		const responsesClient: ResponsesClient = {
+			create: async () => {
+				responseCount += 1;
+				if (responseCount <= 8) {
+					return {
+						output: [
+							{
+								type: "function_call",
+								call_id: `call-${responseCount}`,
+								name: "github_get",
+								arguments: '{"path":"/repos/acme/api/contents"}',
+							},
+						],
+					};
+				}
+
+				return {
+					output_text: "Architecture summary complete.",
+					output: [],
+				};
+			},
+		};
+		const skillManager: SkillManager = {
+			selectSkill: () => "architecture-map",
+			loadSkill: async () => "# Architecture Map",
+		};
+		const toolRunner = createToolRunner([
+			{
+				definition: {
+					type: "function",
+					name: "github_get",
+					description: "Read GitHub data",
+					strict: true,
+					parameters: {
+						type: "object",
+						properties: { path: { type: "string" } },
+						required: ["path"],
+						additionalProperties: false,
+					},
+				},
+				run: async () => ({ ok: true, data: {} }),
+			},
+		]);
+
+		const answer = await createAgentOrchestrator({
+			skillManager,
+			responsesClient,
+			toolRunner,
+			maxToolRounds: loadConfig({}).llm.maxToolRounds,
+		}).answer("อธิบาย architecture ของ acme/api");
+
+		expect(answer).toBe("Architecture summary complete.");
+		expect(responseCount).toBe(9);
 	});
 });

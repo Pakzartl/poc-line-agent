@@ -170,7 +170,7 @@ Defaults:
 - `OPENAI_API_KEY`
 - `OPENAI_BASE_URL` defaults to `https://api.openai.com/v1`. For OpenRouter, use `https://openrouter.ai/api/v1` and an OpenRouter model slug.
 - `OPENAI_MODEL` defaults to `gpt-5.4-mini`.
-- `OPENAI_MAX_TOOL_ROUNDS` defaults to `6`.
+- `OPENAI_MAX_TOOL_ROUNDS` defaults to `20`; the model stops earlier as soon as it can answer.
 - `GITHUB_TOKEN` with read-only repository contents/search access.
 - `TELEGRAM_ALLOWED_USER_IDS` is a comma-separated allowlist of numeric Telegram
   user IDs. An empty list denies all agent access except `/whoami`.
@@ -183,9 +183,26 @@ Skills live in `src/skills/*.md`. The backend selects one skill from the incomin
 
 Included skills:
 
-- `debugging.md`
-- `code-review.md`
-- `architecture.md`
+- `repo-overview.md`
+- `find-code.md`
+- `explain-code.md`
+- `trace-feature.md`
+- `recent-changes.md`
+- `commit-review.md`
+- `pr-review.md`
+- `bug-investigator.md`
+- `test-finder.md`
+- `missing-tests.md`
+- `dependency-check.md`
+- `security-review.md`
+- `config-explainer.md`
+- `api-catalog.md`
+- `database-map.md`
+- `architecture-map.md`
+- `onboarding-guide.md`
+- `release-summary.md`
+- `incident-triage.md`
+- `repo-comparison.md`
 
 ## Tools
 
