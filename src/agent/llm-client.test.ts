@@ -42,6 +42,41 @@ describe("Responses API client", () => {
 		expect(delays).toEqual([0]);
 	});
 
+	test("waits for the longest OpenAI rate-limit reset window", async () => {
+		let calls = 0;
+		const delays: number[] = [];
+		const client = createResponsesClient(
+			loadConfig({ OPENAI_API_KEY: "openai-key" }),
+			asFetch(async () => {
+				calls += 1;
+				if (calls === 1) {
+					return Response.json(
+						{ error: { type: "rate_limit_error", code: "slow_down" } },
+						{
+							status: 429,
+							headers: {
+								"x-ratelimit-reset-requests": "250ms",
+								"x-ratelimit-reset-tokens": "1m2.5s",
+							},
+						},
+					);
+				}
+				return Response.json({ output_text: "OK" });
+			}),
+			{
+				sleep: async (delayMs) => {
+					delays.push(delayMs);
+				},
+				random: () => 0,
+			},
+		);
+
+		await expect(client.create(requestInput)).resolves.toEqual({
+			output_text: "OK",
+		});
+		expect(delays).toEqual([62_500]);
+	});
+
 	test("does not retry billing or quota 429 responses", async () => {
 		let calls = 0;
 		const client = createResponsesClient(

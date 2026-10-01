@@ -35,8 +35,9 @@ function testDeps(): AppDeps {
 		lineReplyClient: { reply: async () => undefined },
 		telegramReplyClient: { reply: async () => undefined },
 		telegramUpdateStore: {
-			has: async () => false,
-			mark: async () => undefined,
+			claim: async () => true,
+			complete: async () => undefined,
+			release: async () => undefined,
 		},
 		whatsAppReplyClient: { reply: async () => undefined },
 		memoryStore: {

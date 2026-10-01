@@ -66,8 +66,8 @@ type ResponsesApiErrorBody = {
 };
 
 const maxAttempts = 3;
-const maxRetryDelayMs = 10_000;
-const maxRetryBudgetMs = 15_000;
+const maxRetryDelayMs = 65_000;
+const maxRetryBudgetMs = 125_000;
 const maxErrorBodyBytes = 16_384;
 const nonRetryable429Codes = new Set([
 	"credit_balance_exhausted",
@@ -165,6 +165,10 @@ export function createResponsesClient(
 
 				const retryDelayMs = getRetryDelayMs(
 					response.headers.get("retry-after"),
+					[
+						response.headers.get("x-ratelimit-reset-tokens"),
+						response.headers.get("x-ratelimit-reset-requests"),
+					],
 					attempt,
 					now(),
 					random(),
@@ -212,6 +216,7 @@ function isRetryableResponse(
 
 function getRetryDelayMs(
 	retryAfter: string | null,
+	rateLimitResets: (string | null)[],
 	attempt: number,
 	nowMs: number,
 	randomValue: number,
@@ -220,6 +225,18 @@ function getRetryDelayMs(
 	const serverDelayMs = parseRetryAfterMs(retryAfter, nowMs);
 	if (serverDelayMs !== undefined) {
 		return serverDelayMs + jitterMs;
+	}
+	const rateLimitDelayMs = rateLimitResets.reduce<number | undefined>(
+		(longestDelay, value) => {
+			const delay = parseRateLimitResetMs(value);
+			return delay === undefined
+				? longestDelay
+				: Math.max(longestDelay ?? 0, delay);
+		},
+		undefined,
+	);
+	if (rateLimitDelayMs !== undefined) {
+		return rateLimitDelayMs + jitterMs;
 	}
 
 	return 1_000 * 2 ** (attempt - 1) + jitterMs;
@@ -240,6 +257,29 @@ function parseRetryAfterMs(
 
 	const retryAt = Date.parse(retryAfter);
 	return Number.isFinite(retryAt) ? Math.max(0, retryAt - nowMs) : undefined;
+}
+
+function parseRateLimitResetMs(value: string | null): number | undefined {
+	if (!value) {
+		return undefined;
+	}
+
+	const duration = value.trim();
+	const partPattern = /(\d+(?:\.\d+)?)(ms|s|m|h)/g;
+	const multipliers = { ms: 1, s: 1_000, m: 60_000, h: 3_600_000 } as const;
+	let totalMs = 0;
+	let consumed = 0;
+	for (const match of duration.matchAll(partPattern)) {
+		if (match.index !== consumed) {
+			return undefined;
+		}
+		const amount = Number(match[1]);
+		const unit = match[2] as keyof typeof multipliers;
+		totalMs += amount * multipliers[unit];
+		consumed += match[0].length;
+	}
+
+	return consumed === duration.length && consumed > 0 ? totalMs : undefined;
 }
 
 async function readErrorBody(

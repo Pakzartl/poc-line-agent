@@ -63,19 +63,31 @@ export async function handleTelegramWebhook(
 	const chatId = message.chat.id;
 	const userId = String(message.from.id);
 	const updateId = getUpdateId(update, message);
-	if (updateId && (await deps.telegramUpdateStore.has(updateId))) {
-		return Response.json({ ok: true, duplicate: true });
+	if (updateId) {
+		try {
+			if (!(await deps.telegramUpdateStore.claim(updateId))) {
+				return Response.json({ ok: true, duplicate: true });
+			}
+		} catch (error) {
+			console.error(
+				JSON.stringify({
+					message: "telegram update claim failed",
+					updateId,
+					error: error instanceof Error ? error.message : "Unknown error",
+				}),
+			);
+		}
 	}
 
-	const replyAndMark = async (text: string): Promise<Response> => {
+	const replyAndComplete = async (text: string): Promise<Response> => {
 		await deps.telegramReplyClient.reply(chatId, text, message.message_id);
 		if (updateId) {
 			try {
-				await deps.telegramUpdateStore.mark(updateId);
+				await deps.telegramUpdateStore.complete(updateId);
 			} catch (error) {
 				console.error(
 					JSON.stringify({
-						message: "telegram update marker failed",
+						message: "telegram update completion failed",
 						updateId,
 						error: error instanceof Error ? error.message : "Unknown error",
 					}),
@@ -86,11 +98,13 @@ export async function handleTelegramWebhook(
 	};
 
 	if (isWhoAmICommand(message.text)) {
-		return replyAndMark(`Your Telegram user ID is: ${userId}`);
+		return replyAndComplete(`Your Telegram user ID is: ${userId}`);
 	}
 
 	if (!deps.config.telegram.allowedUserIds.includes(userId)) {
-		return replyAndMark(`Access denied. Your Telegram user ID is: ${userId}`);
+		return replyAndComplete(
+			`Access denied. Your Telegram user ID is: ${userId}`,
+		);
 	}
 
 	try {
@@ -101,9 +115,25 @@ export async function handleTelegramWebhook(
 			},
 			deps,
 		);
-		return replyAndMark(answer);
+		return replyAndComplete(answer);
 	} catch (error) {
 		if (!(error instanceof ResponsesApiError)) {
+			if (updateId) {
+				try {
+					await deps.telegramUpdateStore.release(updateId);
+				} catch (releaseError) {
+					console.error(
+						JSON.stringify({
+							message: "telegram update release failed",
+							updateId,
+							error:
+								releaseError instanceof Error
+									? releaseError.message
+									: "Unknown error",
+						}),
+					);
+				}
+			}
 			throw error;
 		}
 
@@ -118,7 +148,7 @@ export async function handleTelegramWebhook(
 				retryable: error.retryable,
 			}),
 		);
-		return replyAndMark(
+		return replyAndComplete(
 			error.retryable ? temporaryAiFailureMessage : permanentAiFailureMessage,
 		);
 	}
