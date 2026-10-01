@@ -22,6 +22,7 @@ import { createSkillManager, type SkillName } from "./agent/skill-manager";
 import { createAppDeps, createAppHandler } from "./app";
 import { loadConfig, validateConfig } from "./config";
 import { createKvSessionMemoryStore } from "./memory/kv-session-memory";
+import { createKvTelegramUpdateStore } from "./telegram/update-store";
 
 const skillDocuments: Readonly<Record<SkillName, string>> = {
 	"repo-overview": repoOverviewSkill,
@@ -57,6 +58,7 @@ export default {
 						env.SESSION_MEMORY,
 						config.memory.maxMessages,
 					),
+					telegramUpdateStore: createKvTelegramUpdateStore(env.SESSION_MEMORY),
 					skillManager: createSkillManager(
 						async (name) => skillDocuments[name],
 					),

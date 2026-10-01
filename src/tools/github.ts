@@ -7,7 +7,7 @@ const maxSearchResults = 10;
 const maxFileChars = 20_000;
 const maxCommitFiles = 20;
 const maxGitHubResponseBytes = 750_000;
-const maxGenericResultChars = 40_000;
+const maxGenericResultChars = 20_000;
 const githubUserAgent = "poc-line-agent/0.1";
 
 type GitHubToolOptions = {

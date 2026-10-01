@@ -128,6 +128,22 @@ describe("GitHub tools", () => {
 		).rejects.toThrow("invalid GitHub GET path");
 	});
 
+	test("limits generic GitHub output before adding it to model context", async () => {
+		const tools = createGitHubTools({
+			config: loadConfig({ GITHUB_TOKEN: "secret-token" }).github,
+			fetch: async () => Response.json({ content: "x".repeat(25_000) }),
+		});
+		const githubGet = tools.find(
+			(tool) => tool.definition.name === "github_get",
+		);
+
+		const result = await githubGet?.run('{"path":"/repos/acme/api/tree"}');
+
+		expect(result?.ok).toBe(true);
+		expect(JSON.stringify(result?.data).length).toBeLessThan(20_100);
+		expect(JSON.stringify(result?.data)).toContain("[truncated]");
+	});
+
 	test("does not expose mutation tools", () => {
 		const names = createGitHubTools({
 			config: loadConfig({ GITHUB_TOKEN: "secret-token" }).github,

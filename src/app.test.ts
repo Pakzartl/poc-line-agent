@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createAppHandler, type AppDeps } from "./app";
+import { type AppDeps, createAppHandler } from "./app";
 import { loadConfig } from "./config";
 
 describe("app routes", () => {
@@ -34,6 +34,10 @@ function testDeps(): AppDeps {
 		orchestrator: { answer: async () => "unused" },
 		lineReplyClient: { reply: async () => undefined },
 		telegramReplyClient: { reply: async () => undefined },
+		telegramUpdateStore: {
+			has: async () => false,
+			mark: async () => undefined,
+		},
 		whatsAppReplyClient: { reply: async () => undefined },
 		memoryStore: {
 			read: async () => [],

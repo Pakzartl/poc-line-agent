@@ -1,5 +1,5 @@
-import { createAgentOrchestrator } from "./agent/orchestrator";
 import { createResponsesClient } from "./agent/llm-client";
+import { createAgentOrchestrator } from "./agent/orchestrator";
 import type { SkillManager } from "./agent/skill-manager";
 import { createToolRunner } from "./agent/tool-runner";
 import type { AppConfig } from "./config";
@@ -7,6 +7,10 @@ import { createLineReplyClient } from "./line/reply";
 import { handleLineWebhook } from "./line/webhook";
 import type { SessionMemoryStore } from "./memory/types";
 import { createTelegramReplyClient } from "./telegram/reply";
+import {
+	createPassThroughTelegramUpdateStore,
+	type TelegramUpdateStore,
+} from "./telegram/update-store";
 import { handleTelegramWebhook } from "./telegram/webhook";
 import { createGitHubTools } from "./tools/github";
 import { createWhatsAppReplyClient } from "./whatsapp/reply";
@@ -20,6 +24,7 @@ export type AppDeps = {
 	orchestrator: ReturnType<typeof createAgentOrchestrator>;
 	lineReplyClient: ReturnType<typeof createLineReplyClient>;
 	telegramReplyClient: ReturnType<typeof createTelegramReplyClient>;
+	telegramUpdateStore: TelegramUpdateStore;
 	whatsAppReplyClient: ReturnType<typeof createWhatsAppReplyClient>;
 	memoryStore: SessionMemoryStore;
 };
@@ -28,6 +33,7 @@ export type AppDepsOptions = {
 	fetch?: typeof fetch;
 	memoryStore: SessionMemoryStore;
 	skillManager: SkillManager;
+	telegramUpdateStore?: TelegramUpdateStore;
 };
 
 export function createAppDeps(
@@ -65,6 +71,8 @@ export function createAppDeps(
 		orchestrator,
 		lineReplyClient,
 		telegramReplyClient,
+		telegramUpdateStore:
+			options.telegramUpdateStore ?? createPassThroughTelegramUpdateStore(),
 		whatsAppReplyClient,
 		memoryStore: options.memoryStore,
 	};

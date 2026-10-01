@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { ResponsesApiError } from "../agent/llm-client";
 import type { AgentOrchestrator } from "../agent/orchestrator";
 import { loadConfig } from "../config";
 import type { ConversationMessage, SessionMemoryStore } from "../memory/types";
@@ -62,6 +63,7 @@ describe("Telegram webhook", () => {
 						replies.push(args);
 					},
 				},
+				telegramUpdateStore: emptyUpdateStore(),
 			},
 		);
 
@@ -99,6 +101,7 @@ describe("Telegram webhook", () => {
 						replies.push(args);
 					},
 				},
+				telegramUpdateStore: emptyUpdateStore(),
 			},
 		);
 
@@ -137,6 +140,7 @@ describe("Telegram webhook", () => {
 						replies.push(args);
 					},
 				},
+				telegramUpdateStore: emptyUpdateStore(),
 			},
 		);
 
@@ -160,10 +164,104 @@ describe("Telegram webhook", () => {
 				orchestrator: { answer: async () => "unused" },
 				memoryStore: emptyMemoryStore(),
 				telegramReplyClient: { reply: async () => undefined },
+				telegramUpdateStore: emptyUpdateStore(),
 			},
 		);
 
 		expect(response.status).toBe(401);
+	});
+
+	test("acknowledges duplicate updates without calling the agent or replying", async () => {
+		const config = loadConfig({
+			TELEGRAM_BOT_TOKEN: "bot-token",
+			TELEGRAM_WEBHOOK_SECRET: "webhook-secret",
+			TELEGRAM_ALLOWED_USER_IDS: "9001",
+		});
+		let agentCalls = 0;
+		let replyCalls = 0;
+
+		const response = await handleTelegramWebhook(
+			telegramRequest({
+				text: "list repositories",
+				userId: 9001,
+				chatId: 9001,
+				updateId: 123,
+			}),
+			{
+				config,
+				orchestrator: {
+					answer: async () => {
+						agentCalls += 1;
+						return "unused";
+					},
+				},
+				memoryStore: emptyMemoryStore(),
+				telegramReplyClient: {
+					reply: async () => {
+						replyCalls += 1;
+					},
+				},
+				telegramUpdateStore: {
+					has: async (updateId) => updateId === "123",
+					mark: async () => undefined,
+				},
+			},
+		);
+
+		expect(response.status).toBe(200);
+		expect(await response.json()).toEqual({ ok: true, duplicate: true });
+		expect(agentCalls).toBe(0);
+		expect(replyCalls).toBe(0);
+	});
+
+	test("acknowledges exhausted OpenAI retries after notifying the user", async () => {
+		const config = loadConfig({
+			TELEGRAM_BOT_TOKEN: "bot-token",
+			TELEGRAM_WEBHOOK_SECRET: "webhook-secret",
+			TELEGRAM_ALLOWED_USER_IDS: "9001",
+		});
+		const replies: unknown[][] = [];
+		const marked: string[] = [];
+
+		const response = await handleTelegramWebhook(
+			telegramRequest({
+				text: "explain the repository",
+				userId: 9001,
+				chatId: 9001,
+				updateId: 456,
+			}),
+			{
+				config,
+				orchestrator: {
+					answer: async () => {
+						throw new ResponsesApiError({
+							status: 429,
+							code: "slow_down",
+							requestId: "req_exhausted",
+							attempts: 3,
+							retryable: true,
+						});
+					},
+				},
+				memoryStore: emptyMemoryStore(),
+				telegramReplyClient: {
+					reply: async (...args) => {
+						replies.push(args);
+					},
+				},
+				telegramUpdateStore: {
+					has: async () => false,
+					mark: async (updateId) => {
+						marked.push(updateId);
+					},
+				},
+			},
+		);
+
+		expect(response.status).toBe(200);
+		expect(replies).toHaveLength(1);
+		expect(replies[0]?.[1]).toContain("ระบบ AI มีคำขอหนาแน่น");
+		expect(marked).toEqual(["456"]);
 	});
 
 	test("sends messages through the Telegram Bot API", async () => {
@@ -240,6 +338,7 @@ function telegramRequest(input: {
 	text: string;
 	userId: number;
 	chatId: number;
+	updateId?: number;
 }): Request {
 	return new Request("http://localhost/telegram/webhook", {
 		method: "POST",
@@ -248,6 +347,7 @@ function telegramRequest(input: {
 			"X-Telegram-Bot-Api-Secret-Token": "webhook-secret",
 		},
 		body: JSON.stringify({
+			update_id: input.updateId,
 			message: {
 				message_id: 42,
 				text: input.text,
@@ -256,6 +356,13 @@ function telegramRequest(input: {
 			},
 		}),
 	});
+}
+
+function emptyUpdateStore() {
+	return {
+		has: async () => false,
+		mark: async () => undefined,
+	};
 }
 
 function trackingMemoryStore(onCall: () => void): SessionMemoryStore {
