@@ -22,6 +22,10 @@ export type TelegramJobProcessorDeps = {
 	memoryStore: SessionMemoryStore;
 };
 
+export function telegramSessionId(chatId: number | string): string {
+	return `telegram:chat:${chatId}`;
+}
+
 type TelegramQueueMessage = {
 	body: TelegramJob;
 	attempts: number;
@@ -87,7 +91,7 @@ async function processTelegramJob(
 	job: TelegramJob,
 	deps: TelegramJobProcessorDeps,
 ): Promise<void> {
-	const sessionId = `telegram:chat:${job.chatId}`;
+	const sessionId = telegramSessionId(job.chatId);
 	const history = await deps.memoryStore.read(sessionId);
 	const answer = await deps.orchestrator.answer(job.text, history);
 	await deps.telegramReplyClient.reply(job.chatId, answer, job.messageId);

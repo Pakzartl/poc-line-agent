@@ -48,6 +48,8 @@ Telegram access is deny-by-default. Send `/whoami` to the bot to see your own
 Telegram user ID, then add that numeric ID to `TELEGRAM_ALLOWED_USER_IDS`.
 Separate multiple IDs with commas. Unauthorized users receive only their own ID;
 their messages never reach session memory, OpenAI, or GitHub.
+Allowed users can send `/clear-session` (or `/clear_session`) to delete the
+current chat's conversation history and start fresh with the next message.
 
 Expose the server over HTTPS, then register the webhook. Telegram accepts only `A-Z`, `a-z`, `0-9`, `_`, and `-` in the webhook secret.
 

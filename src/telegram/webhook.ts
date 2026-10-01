@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import type { AppConfig } from "../config";
-import type { TelegramJobQueue } from "./job";
+import type { SessionMemoryStore } from "../memory/types";
+import { type TelegramJobQueue, telegramSessionId } from "./job";
 import type { TelegramReplyClient } from "./reply";
 import type { TelegramUpdateStore } from "./update-store";
 
@@ -16,6 +17,7 @@ type TelegramUpdate = {
 
 export type TelegramWebhookDeps = {
 	config: AppConfig;
+	memoryStore: SessionMemoryStore;
 	telegramJobQueue: TelegramJobQueue;
 	telegramReplyClient: TelegramReplyClient;
 	telegramUpdateStore: TelegramUpdateStore;
@@ -98,6 +100,13 @@ export async function handleTelegramWebhook(
 		);
 	}
 
+	if (isClearSessionCommand(message.text)) {
+		await deps.memoryStore.clear(telegramSessionId(chatId));
+		return replyAndComplete(
+			"Conversation cleared. Your next message will start a new session.",
+		);
+	}
+
 	try {
 		await deps.telegramJobQueue.send({
 			updateId,
@@ -142,6 +151,10 @@ function getUpdateId(
 
 function isWhoAmICommand(text: string): boolean {
 	return /^\/whoami(?:@\w+)?(?:\s|$)/i.test(text.trim());
+}
+
+function isClearSessionCommand(text: string): boolean {
+	return /^\/clear[-_]session(?:@\w+)?(?:\s|$)/i.test(text.trim());
 }
 
 function secretsMatch(received: string | null, expected: string): boolean {
