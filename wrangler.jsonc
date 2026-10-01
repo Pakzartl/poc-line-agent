@@ -24,6 +24,24 @@
 			"binding": "SESSION_MEMORY"
 		}
 	],
+	"queues": {
+		"producers": [
+			{
+				"binding": "TELEGRAM_JOBS",
+				"queue": "poc-line-agent-telegram-jobs"
+			}
+		],
+		"consumers": [
+			{
+				"queue": "poc-line-agent-telegram-jobs",
+				"max_batch_size": 1,
+				"max_batch_timeout": 1,
+				"max_retries": 2,
+				"dead_letter_queue": "poc-line-agent-telegram-jobs-dlq",
+				"max_concurrency": 1
+			}
+		]
+	},
 	"secrets": {
 		"required": [
 			"LINE_CHANNEL_SECRET",

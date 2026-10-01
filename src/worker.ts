@@ -1,3 +1,7 @@
+import { createSkillManager, type SkillName } from "./agent/skill-manager";
+import { createAppDeps, createAppHandler } from "./app";
+import { loadConfig, validateConfig } from "./config";
+import { createKvSessionMemoryStore } from "./memory/kv-session-memory";
 import apiCatalogSkill from "./skills/api-catalog.md";
 import architectureMapSkill from "./skills/architecture-map.md";
 import bugInvestigatorSkill from "./skills/bug-investigator.md";
@@ -13,15 +17,12 @@ import onboardingGuideSkill from "./skills/onboarding-guide.md";
 import prReviewSkill from "./skills/pr-review.md";
 import recentChangesSkill from "./skills/recent-changes.md";
 import releaseSummarySkill from "./skills/release-summary.md";
-import repoOverviewSkill from "./skills/repo-overview.md";
 import repoComparisonSkill from "./skills/repo-comparison.md";
+import repoOverviewSkill from "./skills/repo-overview.md";
 import securityReviewSkill from "./skills/security-review.md";
 import testFinderSkill from "./skills/test-finder.md";
 import traceFeatureSkill from "./skills/trace-feature.md";
-import { createSkillManager, type SkillName } from "./agent/skill-manager";
-import { createAppDeps, createAppHandler } from "./app";
-import { loadConfig, validateConfig } from "./config";
-import { createKvSessionMemoryStore } from "./memory/kv-session-memory";
+import { processTelegramQueueMessage, type TelegramJob } from "./telegram/job";
 import { createKvTelegramUpdateStore } from "./telegram/update-store";
 
 const skillDocuments: Readonly<Record<SkillName, string>> = {
@@ -50,20 +51,7 @@ const skillDocuments: Readonly<Record<SkillName, string>> = {
 export default {
 	async fetch(request, env): Promise<Response> {
 		try {
-			const config = loadConfig(createConfigEnvironment(env));
-			validateConfig(config);
-			const handler = createAppHandler(
-				createAppDeps(config, {
-					memoryStore: createKvSessionMemoryStore(
-						env.SESSION_MEMORY,
-						config.memory.maxMessages,
-					),
-					telegramUpdateStore: createKvTelegramUpdateStore(env.SESSION_MEMORY),
-					skillManager: createSkillManager(
-						async (name) => skillDocuments[name],
-					),
-				}),
-			);
+			const handler = createAppHandler(createWorkerDeps(env));
 
 			return await handler(request);
 		} catch (error) {
@@ -77,7 +65,31 @@ export default {
 			return Response.json({ error: "Internal server error" }, { status: 500 });
 		}
 	},
-} satisfies ExportedHandler<Env>;
+	async queue(batch, env): Promise<void> {
+		const deps = createWorkerDeps(env);
+		for (const message of batch.messages) {
+			await processTelegramQueueMessage(message, deps);
+		}
+	},
+} satisfies ExportedHandler<Env, TelegramJob>;
+
+function createWorkerDeps(env: Env) {
+	const config = loadConfig(createConfigEnvironment(env));
+	validateConfig(config);
+	return createAppDeps(config, {
+		memoryStore: createKvSessionMemoryStore(
+			env.SESSION_MEMORY,
+			config.memory.maxMessages,
+		),
+		telegramJobQueue: {
+			send: async (job) => {
+				await env.TELEGRAM_JOBS.send(job);
+			},
+		},
+		telegramUpdateStore: createKvTelegramUpdateStore(env.SESSION_MEMORY),
+		skillManager: createSkillManager(async (name) => skillDocuments[name]),
+	});
+}
 
 function createConfigEnvironment(env: Env): Record<string, string | undefined> {
 	return {

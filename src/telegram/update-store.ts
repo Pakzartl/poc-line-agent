@@ -14,7 +14,7 @@ type KvUpdateNamespace = {
 	delete(key: string): Promise<void>;
 };
 
-const processingUpdateTtlSeconds = 600;
+const processingUpdateTtlSeconds = 3_600;
 const processedUpdateTtlSeconds = 86_400;
 
 export function createKvTelegramUpdateStore(

@@ -27,7 +27,7 @@ describe("Telegram update store", () => {
 			{
 				key: "telegram:update:12345",
 				value: "processing",
-				expirationTtl: 600,
+				expirationTtl: 3_600,
 			},
 			{
 				key: "telegram:update:12345",
@@ -37,7 +37,7 @@ describe("Telegram update store", () => {
 			{
 				key: "telegram:update:12345",
 				value: "processing",
-				expirationTtl: 600,
+				expirationTtl: 3_600,
 			},
 		]);
 		expect(deletes).toEqual(["telegram:update:12345"]);

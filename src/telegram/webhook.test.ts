@@ -1,42 +1,17 @@
 import { describe, expect, test } from "bun:test";
-import { ResponsesApiError } from "../agent/llm-client";
-import type { AgentOrchestrator } from "../agent/orchestrator";
 import { loadConfig } from "../config";
-import type { ConversationMessage, SessionMemoryStore } from "../memory/types";
+import type { TelegramJob } from "./job";
 import { createTelegramReplyClient } from "./reply";
 import { handleTelegramWebhook } from "./webhook";
 
 describe("Telegram webhook", () => {
-	test("verifies the webhook secret, uses session memory, and replies", async () => {
+	test("verifies the webhook secret and enqueues an allowed message", async () => {
 		const config = loadConfig({
 			TELEGRAM_BOT_TOKEN: "bot-token",
 			TELEGRAM_WEBHOOK_SECRET: "webhook-secret",
 			TELEGRAM_ALLOWED_USER_IDS: "9001",
 		});
-		const history: ConversationMessage[] = [
-			{ role: "user", content: "find login" },
-			{ role: "assistant", content: "found it" },
-		];
-		const sessionIds: string[] = [];
-		const memoryStore: SessionMemoryStore = {
-			read: async (sessionId) => {
-				sessionIds.push(sessionId);
-				return history;
-			},
-			append: async (sessionId, messages) => {
-				sessionIds.push(sessionId);
-				return [...history, ...messages];
-			},
-			clear: async () => undefined,
-		};
-		const seenHistory: ConversationMessage[][] = [];
-		const orchestrator: AgentOrchestrator = {
-			answer: async (_question, previous = []) => {
-				seenHistory.push(previous);
-				return "commit abc123";
-			},
-		};
-		const replies: unknown[][] = [];
+		const jobs: TelegramJob[] = [];
 
 		const response = await handleTelegramWebhook(
 			new Request("http://localhost/telegram/webhook", {
@@ -56,21 +31,26 @@ describe("Telegram webhook", () => {
 			}),
 			{
 				config,
-				orchestrator,
-				memoryStore,
-				telegramReplyClient: {
-					reply: async (...args) => {
-						replies.push(args);
+				telegramJobQueue: {
+					send: async (job) => {
+						jobs.push(job);
 					},
 				},
+				telegramReplyClient: { reply: async () => undefined },
 				telegramUpdateStore: emptyUpdateStore(),
 			},
 		);
 
 		expect(response.status).toBe(200);
-		expect(seenHistory).toEqual([history]);
-		expect(sessionIds).toEqual(["telegram:chat:-1001", "telegram:chat:-1001"]);
-		expect(replies).toEqual([[-1001, "commit abc123", 42]]);
+		expect(await response.json()).toEqual({ ok: true, accepted: true });
+		expect(jobs).toEqual([
+			{
+				chatId: -1001,
+				messageId: 42,
+				text: "what was its commit?",
+				updateId: "message:-1001:42",
+			},
+		]);
 	});
 
 	test("denies users outside the allowlist before memory or the agent", async () => {
@@ -79,23 +59,18 @@ describe("Telegram webhook", () => {
 			TELEGRAM_WEBHOOK_SECRET: "webhook-secret",
 			TELEGRAM_ALLOWED_USER_IDS: "9001",
 		});
-		let agentCalls = 0;
-		let memoryCalls = 0;
+		let queueCalls = 0;
 		const replies: unknown[][] = [];
 
 		const response = await handleTelegramWebhook(
 			telegramRequest({ text: "list repositories", userId: 777, chatId: 777 }),
 			{
 				config,
-				orchestrator: {
-					answer: async () => {
-						agentCalls += 1;
-						return "unused";
+				telegramJobQueue: {
+					send: async () => {
+						queueCalls += 1;
 					},
 				},
-				memoryStore: trackingMemoryStore(() => {
-					memoryCalls += 1;
-				}),
 				telegramReplyClient: {
 					reply: async (...args) => {
 						replies.push(args);
@@ -106,8 +81,7 @@ describe("Telegram webhook", () => {
 		);
 
 		expect(response.status).toBe(200);
-		expect(agentCalls).toBe(0);
-		expect(memoryCalls).toBe(0);
+		expect(queueCalls).toBe(0);
 		expect(replies).toEqual([
 			[777, "Access denied. Your Telegram user ID is: 777", 42],
 		]);
@@ -118,23 +92,18 @@ describe("Telegram webhook", () => {
 			TELEGRAM_BOT_TOKEN: "bot-token",
 			TELEGRAM_WEBHOOK_SECRET: "webhook-secret",
 		});
-		let agentCalls = 0;
-		let memoryCalls = 0;
+		let queueCalls = 0;
 		const replies: unknown[][] = [];
 
 		await handleTelegramWebhook(
 			telegramRequest({ text: "/whoami", userId: 8123, chatId: 8123 }),
 			{
 				config,
-				orchestrator: {
-					answer: async () => {
-						agentCalls += 1;
-						return "unused";
+				telegramJobQueue: {
+					send: async () => {
+						queueCalls += 1;
 					},
 				},
-				memoryStore: trackingMemoryStore(() => {
-					memoryCalls += 1;
-				}),
 				telegramReplyClient: {
 					reply: async (...args) => {
 						replies.push(args);
@@ -144,8 +113,7 @@ describe("Telegram webhook", () => {
 			},
 		);
 
-		expect(agentCalls).toBe(0);
-		expect(memoryCalls).toBe(0);
+		expect(queueCalls).toBe(0);
 		expect(replies).toEqual([[8123, "Your Telegram user ID is: 8123", 42]]);
 	});
 
@@ -161,8 +129,7 @@ describe("Telegram webhook", () => {
 			}),
 			{
 				config,
-				orchestrator: { answer: async () => "unused" },
-				memoryStore: emptyMemoryStore(),
+				telegramJobQueue: { send: async () => undefined },
 				telegramReplyClient: { reply: async () => undefined },
 				telegramUpdateStore: emptyUpdateStore(),
 			},
@@ -177,7 +144,7 @@ describe("Telegram webhook", () => {
 			TELEGRAM_WEBHOOK_SECRET: "webhook-secret",
 			TELEGRAM_ALLOWED_USER_IDS: "9001",
 		});
-		let agentCalls = 0;
+		let queueCalls = 0;
 		let replyCalls = 0;
 
 		const response = await handleTelegramWebhook(
@@ -189,13 +156,11 @@ describe("Telegram webhook", () => {
 			}),
 			{
 				config,
-				orchestrator: {
-					answer: async () => {
-						agentCalls += 1;
-						return "unused";
+				telegramJobQueue: {
+					send: async () => {
+						queueCalls += 1;
 					},
 				},
-				memoryStore: emptyMemoryStore(),
 				telegramReplyClient: {
 					reply: async () => {
 						replyCalls += 1;
@@ -211,33 +176,31 @@ describe("Telegram webhook", () => {
 
 		expect(response.status).toBe(200);
 		expect(await response.json()).toEqual({ ok: true, duplicate: true });
-		expect(agentCalls).toBe(0);
+		expect(queueCalls).toBe(0);
 		expect(replyCalls).toBe(0);
 	});
 
-	test("claims an update before starting the agent so webhook retries are deduplicated", async () => {
+	test("claims an update before enqueueing so webhook retries are deduplicated", async () => {
 		const config = loadConfig({
 			TELEGRAM_BOT_TOKEN: "bot-token",
 			TELEGRAM_WEBHOOK_SECRET: "webhook-secret",
 			TELEGRAM_ALLOWED_USER_IDS: "9001",
 		});
 		const claimed = new Set<string>();
-		let releaseAgent: (() => void) | undefined;
-		const agentGate = new Promise<void>((resolve) => {
-			releaseAgent = resolve;
+		let releaseQueue: (() => void) | undefined;
+		const queueGate = new Promise<void>((resolve) => {
+			releaseQueue = resolve;
 		});
-		let agentCalls = 0;
+		let queueCalls = 0;
 		let replyCalls = 0;
 		const deps = {
 			config,
-			orchestrator: {
-				answer: async () => {
-					agentCalls += 1;
-					await agentGate;
-					return "done";
+			telegramJobQueue: {
+				send: async () => {
+					queueCalls += 1;
+					await queueGate;
 				},
 			},
-			memoryStore: emptyMemoryStore(),
 			telegramReplyClient: {
 				reply: async () => {
 					replyCalls += 1;
@@ -278,64 +241,79 @@ describe("Telegram webhook", () => {
 			ok: true,
 			duplicate: true,
 		});
-		expect(agentCalls).toBe(1);
-		releaseAgent?.();
+		expect(queueCalls).toBe(1);
+		releaseQueue?.();
 		expect((await firstResponse).status).toBe(200);
-		expect(replyCalls).toBe(1);
+		expect(replyCalls).toBe(0);
 	});
 
-	test("acknowledges exhausted OpenAI retries after notifying the user", async () => {
+	test("acknowledges a long-running update as soon as the queue accepts it", async () => {
 		const config = loadConfig({
 			TELEGRAM_BOT_TOKEN: "bot-token",
 			TELEGRAM_WEBHOOK_SECRET: "webhook-secret",
 			TELEGRAM_ALLOWED_USER_IDS: "9001",
 		});
-		const replies: unknown[][] = [];
-		const lifecycle: string[] = [];
+		const jobs: TelegramJob[] = [];
 
 		const response = await handleTelegramWebhook(
 			telegramRequest({
-				text: "explain the repository",
+				text: "list every custom rate limit",
 				userId: 9001,
 				chatId: 9001,
-				updateId: 456,
+				updateId: 790,
 			}),
 			{
 				config,
-				orchestrator: {
-					answer: async () => {
-						throw new ResponsesApiError({
-							status: 429,
-							code: "slow_down",
-							requestId: "req_exhausted",
-							attempts: 3,
-							retryable: true,
-						});
+				telegramJobQueue: {
+					send: async (job) => {
+						jobs.push(job);
 					},
 				},
-				memoryStore: emptyMemoryStore(),
-				telegramReplyClient: {
-					reply: async (...args) => {
-						replies.push(args);
-					},
-				},
-				telegramUpdateStore: {
-					claim: async (updateId) => {
-						lifecycle.push(`claim:${updateId}`);
-						return true;
-					},
-					complete: async (updateId) => {
-						lifecycle.push(`complete:${updateId}`);
-					},
-					release: async () => undefined,
-				},
+				telegramReplyClient: { reply: async () => undefined },
+				telegramUpdateStore: emptyUpdateStore(),
 			},
 		);
 
 		expect(response.status).toBe(200);
-		expect(replies).toHaveLength(1);
-		expect(replies[0]?.[1]).toContain("ระบบ AI มีคำขอหนาแน่น");
-		expect(lifecycle).toEqual(["claim:456", "complete:456"]);
+		expect(await response.json()).toEqual({ ok: true, accepted: true });
+		expect(jobs).toHaveLength(1);
+	});
+
+	test("releases the update claim when enqueueing fails", async () => {
+		const config = loadConfig({
+			TELEGRAM_BOT_TOKEN: "bot-token",
+			TELEGRAM_WEBHOOK_SECRET: "webhook-secret",
+			TELEGRAM_ALLOWED_USER_IDS: "9001",
+		});
+		const released: string[] = [];
+
+		const error = await handleTelegramWebhook(
+			telegramRequest({
+				text: "list every custom rate limit",
+				userId: 9001,
+				chatId: 9001,
+				updateId: 791,
+			}),
+			{
+				config,
+				telegramJobQueue: {
+					send: async () => {
+						throw new Error("queue unavailable");
+					},
+				},
+				telegramReplyClient: { reply: async () => undefined },
+				telegramUpdateStore: {
+					claim: async () => true,
+					complete: async () => undefined,
+					release: async (updateId) => {
+						released.push(updateId);
+					},
+				},
+			},
+		).catch((caught) => caught);
+
+		expect(error).toEqual(new Error("queue unavailable"));
+		expect(released).toEqual(["791"]);
 	});
 
 	test("sends messages through the Telegram Bot API", async () => {
@@ -400,14 +378,6 @@ describe("Telegram webhook", () => {
 	});
 });
 
-function emptyMemoryStore(): SessionMemoryStore {
-	return {
-		read: async () => [],
-		append: async (_sessionId, messages) => messages,
-		clear: async () => undefined,
-	};
-}
-
 function telegramRequest(input: {
 	text: string;
 	userId: number;
@@ -437,21 +407,5 @@ function emptyUpdateStore() {
 		claim: async () => true,
 		complete: async () => undefined,
 		release: async () => undefined,
-	};
-}
-
-function trackingMemoryStore(onCall: () => void): SessionMemoryStore {
-	return {
-		read: async () => {
-			onCall();
-			return [];
-		},
-		append: async (_sessionId, messages) => {
-			onCall();
-			return messages;
-		},
-		clear: async () => {
-			onCall();
-		},
 	};
 }

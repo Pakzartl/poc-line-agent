@@ -1,9 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
-import { answerConversation } from "../agent/conversation";
-import { ResponsesApiError } from "../agent/llm-client";
-import type { AgentOrchestrator } from "../agent/orchestrator";
 import type { AppConfig } from "../config";
-import type { SessionMemoryStore } from "../memory/types";
+import type { TelegramJobQueue } from "./job";
 import type { TelegramReplyClient } from "./reply";
 import type { TelegramUpdateStore } from "./update-store";
 
@@ -19,16 +16,10 @@ type TelegramUpdate = {
 
 export type TelegramWebhookDeps = {
 	config: AppConfig;
-	orchestrator: AgentOrchestrator;
+	telegramJobQueue: TelegramJobQueue;
 	telegramReplyClient: TelegramReplyClient;
 	telegramUpdateStore: TelegramUpdateStore;
-	memoryStore: SessionMemoryStore;
 };
-
-const temporaryAiFailureMessage =
-	"ระบบ AI มีคำขอหนาแน่นชั่วคราว กรุณาลองใหม่อีกครั้งในอีกสักครู่ครับ";
-const permanentAiFailureMessage =
-	"ระบบ AI ไม่พร้อมใช้งาน กรุณาติดต่อผู้ดูแลระบบเพื่อตรวจสอบโควตาหรือการตั้งค่าครับ";
 
 export async function handleTelegramWebhook(
 	request: Request,
@@ -108,49 +99,31 @@ export async function handleTelegramWebhook(
 	}
 
 	try {
-		const answer = await answerConversation(
-			{
-				question: message.text,
-				sessionId: `telegram:chat:${chatId}`,
-			},
-			deps,
-		);
-		return replyAndComplete(answer);
+		await deps.telegramJobQueue.send({
+			updateId,
+			chatId,
+			messageId: message.message_id,
+			text: message.text,
+		});
+		return Response.json({ ok: true, accepted: true });
 	} catch (error) {
-		if (!(error instanceof ResponsesApiError)) {
-			if (updateId) {
-				try {
-					await deps.telegramUpdateStore.release(updateId);
-				} catch (releaseError) {
-					console.error(
-						JSON.stringify({
-							message: "telegram update release failed",
-							updateId,
-							error:
-								releaseError instanceof Error
-									? releaseError.message
-									: "Unknown error",
-						}),
-					);
-				}
+		if (updateId) {
+			try {
+				await deps.telegramUpdateStore.release(updateId);
+			} catch (releaseError) {
+				console.error(
+					JSON.stringify({
+						message: "telegram update release failed",
+						updateId,
+						error:
+							releaseError instanceof Error
+								? releaseError.message
+								: "Unknown error",
+					}),
+				);
 			}
-			throw error;
 		}
-
-		console.error(
-			JSON.stringify({
-				message: "telegram agent request failed",
-				provider: "openai",
-				status: error.status,
-				code: error.code ?? "unknown",
-				requestId: error.requestId ?? "unknown",
-				attempts: error.attempts,
-				retryable: error.retryable,
-			}),
-		);
-		return replyAndComplete(
-			error.retryable ? temporaryAiFailureMessage : permanentAiFailureMessage,
-		);
+		throw error;
 	}
 }
 

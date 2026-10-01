@@ -6,6 +6,10 @@ import type { AppConfig } from "./config";
 import { createLineReplyClient } from "./line/reply";
 import { handleLineWebhook } from "./line/webhook";
 import type { SessionMemoryStore } from "./memory/types";
+import {
+	createInlineTelegramJobQueue,
+	type TelegramJobQueue,
+} from "./telegram/job";
 import { createTelegramReplyClient } from "./telegram/reply";
 import {
 	createPassThroughTelegramUpdateStore,
@@ -24,6 +28,7 @@ export type AppDeps = {
 	orchestrator: ReturnType<typeof createAgentOrchestrator>;
 	lineReplyClient: ReturnType<typeof createLineReplyClient>;
 	telegramReplyClient: ReturnType<typeof createTelegramReplyClient>;
+	telegramJobQueue: TelegramJobQueue;
 	telegramUpdateStore: TelegramUpdateStore;
 	whatsAppReplyClient: ReturnType<typeof createWhatsAppReplyClient>;
 	memoryStore: SessionMemoryStore;
@@ -33,6 +38,7 @@ export type AppDepsOptions = {
 	fetch?: typeof fetch;
 	memoryStore: SessionMemoryStore;
 	skillManager: SkillManager;
+	telegramJobQueue?: TelegramJobQueue;
 	telegramUpdateStore?: TelegramUpdateStore;
 };
 
@@ -66,7 +72,7 @@ export function createAppDeps(
 		apiBaseUrl: config.whatsapp.apiBaseUrl,
 		fetch: fetchImpl,
 	});
-	return {
+	const baseDeps = {
 		config,
 		orchestrator,
 		lineReplyClient,
@@ -75,6 +81,11 @@ export function createAppDeps(
 			options.telegramUpdateStore ?? createPassThroughTelegramUpdateStore(),
 		whatsAppReplyClient,
 		memoryStore: options.memoryStore,
+	};
+	return {
+		...baseDeps,
+		telegramJobQueue:
+			options.telegramJobQueue ?? createInlineTelegramJobQueue(baseDeps),
 	};
 }
 

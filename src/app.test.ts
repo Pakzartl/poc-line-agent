@@ -34,6 +34,7 @@ function testDeps(): AppDeps {
 		orchestrator: { answer: async () => "unused" },
 		lineReplyClient: { reply: async () => undefined },
 		telegramReplyClient: { reply: async () => undefined },
+		telegramJobQueue: { send: async () => undefined },
 		telegramUpdateStore: {
 			claim: async () => true,
 			complete: async () => undefined,
