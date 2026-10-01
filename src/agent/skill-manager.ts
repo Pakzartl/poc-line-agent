@@ -205,6 +205,10 @@ const skillKeywords: { name: SkillName; terms: string[] }[] = [
 	{
 		name: "find-code",
 		terms: [
+			"rate limit",
+			"ratelimit",
+			"rate-limit",
+			"throttle",
 			"find code",
 			"search code",
 			"where is",

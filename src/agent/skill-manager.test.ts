@@ -27,6 +27,10 @@ describe("skill manager", () => {
 		["incident ระบบล่มเมื่อคืน", "incident-triage"],
 		["เทียบ repo api กับ web", "repo-comparison"],
 		["ใช้ $find-code หา config", "find-code"],
+		[
+			"list custom ratelimit ออกมาให้หน่อย บอก api ไหนใช้ rate limit อะไร",
+			"find-code",
+		],
 	] as const)("routes %s to %s", (question, expected) => {
 		expect(manager.selectSkill(question)).toBe(expected);
 	});

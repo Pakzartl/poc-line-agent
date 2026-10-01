@@ -13,8 +13,17 @@ const validEnv = {
 describe("config validation", () => {
 	test("accepts the documented defaults", () => {
 		const config = loadConfig(validEnv);
-		expect(config.llm.maxToolRounds).toBe(20);
+		expect(config.llm.maxToolRounds).toBe(50);
 		expect(() => validateConfig(config)).not.toThrow();
+	});
+
+	test("accepts up to fifty tool rounds and rejects larger budgets", () => {
+		expect(() =>
+			validateConfig(loadConfig({ ...validEnv, OPENAI_MAX_TOOL_ROUNDS: "50" })),
+		).not.toThrow();
+		expect(() =>
+			validateConfig(loadConfig({ ...validEnv, OPENAI_MAX_TOOL_ROUNDS: "51" })),
+		).toThrow("OPENAI_MAX_TOOL_ROUNDS must be an integer between 0 and 50");
 	});
 
 	test("accepts Telegram or WhatsApp without LINE credentials", () => {

@@ -1,9 +1,9 @@
-import { buildInstructions } from "./prompts";
+import type { ConversationMessage } from "../memory/types";
 import type { ResponsesClient, ResponsesInputItem } from "./llm-client";
 import { extractFunctionCalls, extractOutputText } from "./llm-client";
+import { buildInstructions } from "./prompts";
 import type { SkillManager } from "./skill-manager";
 import type { ToolRunner } from "./tool-runner";
-import type { ConversationMessage } from "../memory/types";
 
 export type AgentOrchestrator = {
 	answer(question: string, history?: ConversationMessage[]): Promise<string>;
@@ -32,7 +32,7 @@ export function createAgentOrchestrator(
 				{ role: "user", content: question },
 			];
 
-			for (let round = 0; round <= options.maxToolRounds; round += 1) {
+			for (let round = 0; round < options.maxToolRounds; round += 1) {
 				const response = await options.responsesClient.create({
 					instructions,
 					items,
@@ -56,7 +56,19 @@ export function createAgentOrchestrator(
 				}
 			}
 
-			return "I could not finish within the configured tool-call limit.";
+			const finalResponse = await options.responsesClient.create({
+				instructions: [
+					instructions,
+					"The tool-use budget is exhausted. Do not call any more tools. Answer now using the evidence already collected, state important gaps, and keep the result concise.",
+				].join("\n\n"),
+				items,
+				tools: [],
+			});
+
+			return (
+				extractOutputText(finalResponse) ||
+				"I reached the tool-use limit before enough evidence was available."
+			);
 		},
 	};
 }

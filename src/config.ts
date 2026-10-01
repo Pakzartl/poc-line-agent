@@ -75,7 +75,7 @@ export function loadConfig(env: ConfigEnvironment): AppConfig {
 			apiKey: env.OPENAI_API_KEY ?? "",
 			baseUrl: stripTrailingSlash(env.OPENAI_BASE_URL ?? defaultOpenAiBaseUrl),
 			model: env.OPENAI_MODEL ?? "gpt-5.4-mini",
-			maxToolRounds: Number(env.OPENAI_MAX_TOOL_ROUNDS ?? "20"),
+			maxToolRounds: Number(env.OPENAI_MAX_TOOL_ROUNDS ?? "50"),
 		},
 		github: {
 			owner: env.GITHUB_OWNER ?? "",
@@ -178,10 +178,10 @@ export function validateConfig(config: AppConfig): void {
 	if (
 		!Number.isInteger(config.llm.maxToolRounds) ||
 		config.llm.maxToolRounds < 0 ||
-		config.llm.maxToolRounds > 20
+		config.llm.maxToolRounds > 50
 	) {
 		throw new Error(
-			"OPENAI_MAX_TOOL_ROUNDS must be an integer between 0 and 20",
+			"OPENAI_MAX_TOOL_ROUNDS must be an integer between 0 and 50",
 		);
 	}
 

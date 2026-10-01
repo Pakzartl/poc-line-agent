@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { loadConfig } from "../config";
-import { createAgentOrchestrator } from "./orchestrator";
 import type { ResponsesClient, ResponsesInputItem } from "./llm-client";
+import { createAgentOrchestrator } from "./orchestrator";
 import type { SkillManager } from "./skill-manager";
 import { createToolRunner } from "./tool-runner";
 
@@ -147,5 +147,62 @@ describe("agent orchestrator", () => {
 
 		expect(answer).toBe("Architecture summary complete.");
 		expect(responseCount).toBe(9);
+	});
+
+	test("returns a best-effort synthesis after exhausting the tool budget", async () => {
+		const seenToolCounts: number[] = [];
+		const responsesClient: ResponsesClient = {
+			create: async ({ tools }) => {
+				seenToolCounts.push(tools.length);
+				if (tools.length > 0) {
+					return {
+						output: [
+							{
+								type: "function_call",
+								call_id: `call-${seenToolCounts.length}`,
+								name: "github_get",
+								arguments: '{"path":"/repos/acme/api/contents"}',
+							},
+						],
+					};
+				}
+
+				return {
+					output_text: "สรุปจากข้อมูลที่ตรวจได้ก่อนถึงเพดาน",
+					output: [],
+				};
+			},
+		};
+		const skillManager: SkillManager = {
+			selectSkill: () => "find-code",
+			loadSkill: async () => "# Find Code",
+		};
+		const toolRunner = createToolRunner([
+			{
+				definition: {
+					type: "function",
+					name: "github_get",
+					description: "Read GitHub data",
+					strict: true,
+					parameters: {
+						type: "object",
+						properties: { path: { type: "string" } },
+						required: ["path"],
+						additionalProperties: false,
+					},
+				},
+				run: async () => ({ ok: true, data: { path: "src/rate-limit.ts" } }),
+			},
+		]);
+
+		const answer = await createAgentOrchestrator({
+			skillManager,
+			responsesClient,
+			toolRunner,
+			maxToolRounds: 2,
+		}).answer("list custom rate limit");
+
+		expect(answer).toBe("สรุปจากข้อมูลที่ตรวจได้ก่อนถึงเพดาน");
+		expect(seenToolCounts).toEqual([1, 1, 0]);
 	});
 });
