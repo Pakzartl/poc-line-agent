@@ -55,6 +55,7 @@ export function createAppDeps(
 		responsesClient: createResponsesClient(config, fetchImpl),
 		toolRunner,
 		maxToolRounds: config.llm.maxToolRounds,
+		maxToolCalls: config.llm.maxToolCalls,
 	});
 	const lineReplyClient = createLineReplyClient({
 		channelAccessToken: config.line.channelAccessToken,

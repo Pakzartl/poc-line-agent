@@ -68,6 +68,7 @@ describe("agent orchestrator", () => {
 			responsesClient,
 			toolRunner,
 			maxToolRounds: 3,
+			maxToolCalls: 10,
 		}).answer("what was its path?", [
 			{ role: "user", content: "find the login failure" },
 			{
@@ -143,6 +144,7 @@ describe("agent orchestrator", () => {
 			responsesClient,
 			toolRunner,
 			maxToolRounds: loadConfig({}).llm.maxToolRounds,
+			maxToolCalls: loadConfig({}).llm.maxToolCalls,
 		}).answer("อธิบาย architecture ของ acme/api");
 
 		expect(answer).toBe("Architecture summary complete.");
@@ -200,9 +202,77 @@ describe("agent orchestrator", () => {
 			responsesClient,
 			toolRunner,
 			maxToolRounds: 2,
+			maxToolCalls: 10,
 		}).answer("list custom rate limit");
 
 		expect(answer).toBe("สรุปจากข้อมูลที่ตรวจได้ก่อนถึงเพดาน");
 		expect(seenToolCounts).toEqual([1, 1, 0]);
+	});
+
+	test("stops executing tools at the total tool-call budget", async () => {
+		let responseCount = 0;
+		let executed = 0;
+		const finalInputs: ResponsesInputItem[][] = [];
+		const responsesClient: ResponsesClient = {
+			create: async ({ items, tools }) => {
+				responseCount += 1;
+				if (tools.length > 0) {
+					return {
+						output: [1, 2, 3].map((index) => ({
+							type: "function_call" as const,
+							call_id: `call-${index}`,
+							name: "github_get",
+							arguments: '{"path":"/repos/acme/api"}',
+						})),
+					};
+				}
+				finalInputs.push(items);
+				return { output_text: "สรุปหลังถึงเพดานรวม", output: [] };
+			},
+		};
+		const skillManager: SkillManager = {
+			selectSkill: () => "find-code",
+			loadSkill: async () => "# Find Code",
+		};
+		const toolRunner = createToolRunner([
+			{
+				definition: {
+					type: "function",
+					name: "github_get",
+					description: "Read GitHub data",
+					strict: true,
+					parameters: {
+						type: "object",
+						properties: { path: { type: "string" } },
+						required: ["path"],
+						additionalProperties: false,
+					},
+				},
+				run: async () => {
+					executed += 1;
+					return { ok: true, data: {} };
+				},
+			},
+		]);
+
+		const answer = await createAgentOrchestrator({
+			skillManager,
+			responsesClient,
+			toolRunner,
+			maxToolRounds: 50,
+			maxToolCalls: 2,
+		}).answer("audit the repository");
+
+		expect(answer).toBe("สรุปหลังถึงเพดานรวม");
+		expect(responseCount).toBe(2);
+		expect(executed).toBe(2);
+		expect(finalInputs[0]).toContainEqual({
+			type: "function_call_output",
+			call_id: "call-3",
+			output: JSON.stringify({
+				ok: false,
+				error: "Total tool-call budget exhausted",
+			}),
+		});
 	});
 });

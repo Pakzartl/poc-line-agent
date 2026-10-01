@@ -29,14 +29,14 @@ describe("skill manager", () => {
 		["ใช้ $find-code หา config", "find-code"],
 		[
 			"list custom ratelimit ออกมาให้หน่อย บอก api ไหนใช้ rate limit อะไร",
-			"find-code",
+			"rate-limit-audit",
 		],
 	] as const)("routes %s to %s", (question, expected) => {
 		expect(manager.selectSkill(question)).toBe(expected);
 	});
 
-	test("registers the full twenty-skill catalog", () => {
-		expect(skillNames).toHaveLength(20);
+	test("registers the full skill catalog", () => {
+		expect(skillNames).toHaveLength(21);
 	});
 
 	test("loads every registered skill document", async () => {

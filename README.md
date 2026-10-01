@@ -173,7 +173,9 @@ Defaults:
 - `OPENAI_BASE_URL` defaults to `https://api.openai.com/v1`. For OpenRouter, use `https://openrouter.ai/api/v1` and an OpenRouter model slug.
 - `OPENAI_MODEL` defaults to `gpt-5.4-mini`.
 - `OPENAI_MAX_TOOL_ROUNDS` defaults to `50`; the model stops earlier as soon as it can answer. If it reaches the limit, it returns a best-effort summary from the evidence already collected.
+- `OPENAI_MAX_TOOL_CALLS` defaults to `100` and caps the total tools executed even when one model round requests several tools.
 - `GITHUB_TOKEN` with read-only repository contents/search access.
+- `GITHUB_REF` defaults to `main`. Branch-aware code search and file reads use this exact ref; production currently uses `dev`.
 - `TELEGRAM_ALLOWED_USER_IDS` is a comma-separated allowlist of numeric Telegram
   user IDs. An empty list denies all agent access except `/whoami`.
 - `SESSION_MEMORY_DIR` defaults to `.sessions`.
@@ -187,6 +189,7 @@ Included skills:
 
 - `repo-overview.md`
 - `find-code.md`
+- `rate-limit-audit.md`
 - `explain-code.md`
 - `trace-feature.md`
 - `recent-changes.md`
@@ -212,12 +215,14 @@ The model can request:
 
 - `list_repositories()`
 - `github_get(path)` for allowlisted GitHub REST GET endpoints
-- `search_code(repository, query)`
-- `read_file(repository, path)`
+- `search_code(repository, query, ref?)` scans the configured ref; separate literal
+  alternatives with `|` to search the downloaded branch archive once.
+- `read_file(repository, path, ref?)`
 - `get_commit(repository, sha)`
 
-All GitHub requests are made by the backend with HTTP `GET` only. External URLs,
-redirects, and mutation tools are blocked. Tokens are never included in model
-input or chat replies.
+All GitHub requests are made by the backend with HTTP `GET` only. Mutation tools
+and arbitrary external URLs are blocked. Branch archive redirects issued by
+GitHub are followed for bounded streaming search. Tokens are never included in
+model input or chat replies.
 
 Responses are sent with `store: false`; only bounded tool output is returned to the model.

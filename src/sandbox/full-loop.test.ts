@@ -77,12 +77,12 @@ describe("local sandbox full loop", () => {
 		expect(result.responseRequestCount).toBe(3);
 		expect(
 			result.githubRequests.some((path) =>
-				path.startsWith("/github/search/code"),
+				path.startsWith("/github/repos/sandbox/repo/tarball/main"),
 			),
 		).toBe(true);
 		expect(
 			result.githubRequests.includes(
-				"/github/repos/sandbox/repo/contents/src/auth/login.ts",
+				"/github/repos/sandbox/repo/contents/src/auth/login.ts?ref=main",
 			),
 		).toBe(true);
 		expect(result.lineReplies).toHaveLength(1);
@@ -143,7 +143,7 @@ describe("local sandbox full loop", () => {
 		expect(response.status).toBe(200);
 		expect(state.responsesRequests).toHaveLength(3);
 		expect(state.githubRequests).toContain(
-			"/github/repos/sandbox/repo/contents/src/auth/login.ts",
+			"/github/repos/sandbox/repo/contents/src/auth/login.ts?ref=main",
 		);
 		expect(state.telegramReplies).toHaveLength(1);
 		expect(state.telegramReplies[0]).toMatchObject({
@@ -218,7 +218,7 @@ describe("local sandbox full loop", () => {
 		expect(response.status).toBe(200);
 		expect(state.responsesRequests).toHaveLength(3);
 		expect(state.githubRequests).toContain(
-			"/github/repos/sandbox/repo/contents/src/auth/login.ts",
+			"/github/repos/sandbox/repo/contents/src/auth/login.ts?ref=main",
 		);
 		expect(state.whatsAppReplies).toHaveLength(1);
 		expect(state.whatsAppReplies[0]).toMatchObject({

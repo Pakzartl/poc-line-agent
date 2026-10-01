@@ -11,6 +11,7 @@ import databaseMapSkill from "./skills/database-map.md";
 import dependencyCheckSkill from "./skills/dependency-check.md";
 import explainCodeSkill from "./skills/explain-code.md";
 import findCodeSkill from "./skills/find-code.md";
+import rateLimitAuditSkill from "./skills/rate-limit-audit.md";
 import incidentTriageSkill from "./skills/incident-triage.md";
 import missingTestsSkill from "./skills/missing-tests.md";
 import onboardingGuideSkill from "./skills/onboarding-guide.md";
@@ -28,6 +29,7 @@ import { createKvTelegramUpdateStore } from "./telegram/update-store";
 const skillDocuments: Readonly<Record<SkillName, string>> = {
 	"repo-overview": repoOverviewSkill,
 	"find-code": findCodeSkill,
+	"rate-limit-audit": rateLimitAuditSkill,
 	"explain-code": explainCodeSkill,
 	"trace-feature": traceFeatureSkill,
 	"recent-changes": recentChangesSkill,
@@ -109,8 +111,10 @@ function createConfigEnvironment(env: Env): Record<string, string | undefined> {
 		OPENAI_BASE_URL: env.OPENAI_BASE_URL,
 		OPENAI_MODEL: env.OPENAI_MODEL,
 		OPENAI_MAX_TOOL_ROUNDS: env.OPENAI_MAX_TOOL_ROUNDS,
+		OPENAI_MAX_TOOL_CALLS: env.OPENAI_MAX_TOOL_CALLS,
 		GITHUB_TOKEN: env.GITHUB_TOKEN,
 		GITHUB_API_BASE_URL: env.GITHUB_API_BASE_URL,
+		GITHUB_REF: env.GITHUB_REF,
 		SESSION_MEMORY_MAX_MESSAGES: env.SESSION_MEMORY_MAX_MESSAGES,
 	};
 }

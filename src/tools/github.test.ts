@@ -44,40 +44,99 @@ describe("GitHub tools", () => {
 		});
 	});
 
-	test("search_code uses GitHub code search without exposing the token", async () => {
+	test("search_code scans the configured branch archive without exposing the token", async () => {
 		const requestedHeaders: HeadersInit[] = [];
+		const requestedUrls: string[] = [];
 		const tools = createGitHubTools({
 			config: loadConfig({
 				GITHUB_OWNER: "superset",
 				GITHUB_REPO: "repo",
 				GITHUB_TOKEN: "secret-token",
+				GITHUB_REF: "dev",
 			}).github,
-			fetch: async (_url, init) => {
+			fetch: async (url, init) => {
+				requestedUrls.push(String(url));
 				requestedHeaders.push(init?.headers ?? {});
-				return Response.json({
-					items: [
-						{ path: "src/auth/login.ts", html_url: "https://github.test/file" },
-					],
+				return tarGzipResponse({
+					"superset-repo/src/auth/login.ts":
+						"@Throttle({ default: { limit: 5, ttl: 60000 } })\nlogin() {}",
+					"superset-repo/src/other.ts": "export const value = 1;",
 				});
 			},
 		});
 
 		const result = await tools
 			.find((tool) => tool.definition.name === "search_code")
-			?.run('{"repository":"superset/repo","query":"login"}');
+			?.run('{"repository":"superset/repo","query":"Throttle|rate limit"}');
 
-		expect(result).toEqual({
-			ok: true,
-			data: {
-				repository: "superset/repo",
-				files: [{ path: "src/auth/login.ts", url: "https://github.test/file" }],
-			},
+		expect(result?.ok).toBe(true);
+		expect(result?.data).toMatchObject({
+			repository: "superset/repo",
+			ref: "dev",
+			queries: ["Throttle", "rate limit"],
+			matchedFiles: 1,
+			files: [
+				{
+					path: "src/auth/login.ts",
+					matchedQueries: ["Throttle"],
+				},
+			],
 		});
+		expect(requestedUrls[0]).toContain("/repos/superset/repo/tarball/dev");
+		const secondResult = await tools
+			.find((tool) => tool.definition.name === "search_code")
+			?.run('{"repository":"superset/repo","query":"export","ref":"dev"}');
+		expect(secondResult?.data).toMatchObject({ indexReused: true });
+		expect(requestedUrls).toHaveLength(1);
 		expect(JSON.stringify(result)).not.toContain("secret-token");
 		expect(JSON.stringify(requestedHeaders)).toContain("secret-token");
 		expect(new Headers(requestedHeaders[0]).get("user-agent")).toBe(
 			"poc-line-agent/0.1",
 		);
+	});
+
+	test("read_file reads from the configured ref", async () => {
+		let requestedUrl = "";
+		const tools = createGitHubTools({
+			config: loadConfig({
+				GITHUB_TOKEN: "secret-token",
+				GITHUB_REF: "dev",
+			}).github,
+			fetch: async (url) => {
+				requestedUrl = String(url);
+				return Response.json({
+					path: "src/config.ts",
+					size: 12,
+					encoding: "base64",
+					content: Buffer.from("export {};\n").toString("base64"),
+				});
+			},
+		});
+
+		const result = await tools
+			.find((tool) => tool.definition.name === "read_file")
+			?.run('{"repository":"superset/repo","path":"src/config.ts"}');
+
+		expect(requestedUrl).toContain("?ref=dev");
+		expect(result?.data).toMatchObject({ ref: "dev" });
+	});
+
+	test("blocks archive redirects outside the configured GitHub service", async () => {
+		const tools = createGitHubTools({
+			config: loadConfig({ GITHUB_TOKEN: "secret-token" }).github,
+			fetch: async () =>
+				new Response(null, {
+					status: 302,
+					headers: { Location: "https://example.com/archive.tar.gz" },
+				}),
+		});
+
+		await expect(
+			tools
+				.find((tool) => tool.definition.name === "search_code")
+				?.run('{"repository":"superset/repo","query":"login"}') ??
+				Promise.resolve(),
+		).rejects.toThrow("GitHub archive redirect was not trusted");
 	});
 
 	test("read_file limits large decoded content", async () => {
@@ -145,9 +204,10 @@ describe("GitHub tools", () => {
 	});
 
 	test("does not expose mutation tools", () => {
-		const names = createGitHubTools({
+		const tools = createGitHubTools({
 			config: loadConfig({ GITHUB_TOKEN: "secret-token" }).github,
-		}).map((tool) => tool.definition.name);
+		});
+		const names = tools.map((tool) => tool.definition.name);
 
 		expect(names).toEqual([
 			"list_repositories",
@@ -156,5 +216,51 @@ describe("GitHub tools", () => {
 			"read_file",
 			"get_commit",
 		]);
+		for (const tool of tools) {
+			expect([...tool.definition.parameters.required].sort()).toEqual(
+				Object.keys(tool.definition.parameters.properties).sort(),
+			);
+		}
 	});
 });
+
+function tarGzipResponse(files: Record<string, string>): Response {
+	const entries = Object.entries(files).flatMap(([path, content]) => {
+		const body = new TextEncoder().encode(content);
+		const header = new Uint8Array(512);
+		writeTarText(header, 0, 100, path);
+		writeTarText(header, 100, 8, "0000644");
+		writeTarText(header, 108, 8, "0000000");
+		writeTarText(header, 116, 8, "0000000");
+		writeTarText(
+			header,
+			124,
+			12,
+			`${body.byteLength.toString(8).padStart(11, "0")}\0`,
+		);
+		writeTarText(header, 136, 12, "00000000000");
+		header[156] = "0".charCodeAt(0);
+		const padding = new Uint8Array((512 - (body.byteLength % 512)) % 512);
+		return [header, body, padding];
+	});
+	entries.push(new Uint8Array(1024));
+	const size = entries.reduce((total, entry) => total + entry.byteLength, 0);
+	const tar = new Uint8Array(size);
+	let offset = 0;
+	for (const entry of entries) {
+		tar.set(entry, offset);
+		offset += entry.byteLength;
+	}
+	return new Response(Bun.gzipSync(tar), {
+		headers: { "Content-Type": "application/x-gzip" },
+	});
+}
+
+function writeTarText(
+	target: Uint8Array,
+	offset: number,
+	length: number,
+	value: string,
+): void {
+	target.set(new TextEncoder().encode(value).slice(0, length), offset);
+}

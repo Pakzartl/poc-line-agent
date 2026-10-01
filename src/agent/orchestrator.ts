@@ -14,6 +14,7 @@ export type AgentOrchestratorOptions = {
 	responsesClient: ResponsesClient;
 	toolRunner: ToolRunner;
 	maxToolRounds: number;
+	maxToolCalls: number;
 };
 
 export function createAgentOrchestrator(
@@ -32,6 +33,8 @@ export function createAgentOrchestrator(
 				{ role: "user", content: question },
 			];
 
+			let toolCallCount = 0;
+			let budgetExhausted = false;
 			for (let round = 0; round < options.maxToolRounds; round += 1) {
 				const response = await options.responsesClient.create({
 					instructions,
@@ -47,12 +50,41 @@ export function createAgentOrchestrator(
 				items.push(...(response.output ?? []));
 
 				for (const call of calls) {
+					if (toolCallCount >= options.maxToolCalls) {
+						items.push({
+							type: "function_call_output",
+							call_id: call.call_id,
+							output: JSON.stringify({
+								ok: false,
+								error: "Total tool-call budget exhausted",
+							}),
+						});
+						budgetExhausted = true;
+						continue;
+					}
+
+					toolCallCount += 1;
+					const startedAt = Date.now();
 					const result = await options.toolRunner.run(call);
+					console.info(
+						JSON.stringify({
+							message: "agent tool call",
+							tool: call.name,
+							round: round + 1,
+							toolCall: toolCallCount,
+							ok: result.ok,
+							durationMs: Date.now() - startedAt,
+						}),
+					);
 					items.push({
 						type: "function_call_output",
 						call_id: call.call_id,
 						output: JSON.stringify(result),
 					});
+				}
+
+				if (budgetExhausted || toolCallCount >= options.maxToolCalls) {
+					break;
 				}
 			}
 

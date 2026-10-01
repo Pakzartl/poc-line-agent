@@ -14,6 +14,7 @@ describe("config validation", () => {
 	test("accepts the documented defaults", () => {
 		const config = loadConfig(validEnv);
 		expect(config.llm.maxToolRounds).toBe(50);
+		expect(config.llm.maxToolCalls).toBe(100);
 		expect(() => validateConfig(config)).not.toThrow();
 	});
 
@@ -24,6 +25,15 @@ describe("config validation", () => {
 		expect(() =>
 			validateConfig(loadConfig({ ...validEnv, OPENAI_MAX_TOOL_ROUNDS: "51" })),
 		).toThrow("OPENAI_MAX_TOOL_ROUNDS must be an integer between 0 and 50");
+	});
+
+	test("accepts a bounded total tool-call budget", () => {
+		expect(() =>
+			validateConfig(loadConfig({ ...validEnv, OPENAI_MAX_TOOL_CALLS: "100" })),
+		).not.toThrow();
+		expect(() =>
+			validateConfig(loadConfig({ ...validEnv, OPENAI_MAX_TOOL_CALLS: "201" })),
+		).toThrow("OPENAI_MAX_TOOL_CALLS must be an integer between 1 and 200");
 	});
 
 	test("accepts Telegram or WhatsApp without LINE credentials", () => {

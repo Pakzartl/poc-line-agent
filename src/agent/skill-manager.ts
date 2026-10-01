@@ -1,6 +1,7 @@
 export const skillNames = [
 	"repo-overview",
 	"find-code",
+	"rate-limit-audit",
 	"explain-code",
 	"trace-feature",
 	"recent-changes",
@@ -24,6 +25,18 @@ export const skillNames = [
 export type SkillName = (typeof skillNames)[number];
 
 const skillKeywords: { name: SkillName; terms: string[] }[] = [
+	{
+		name: "rate-limit-audit",
+		terms: [
+			"rate limit",
+			"ratelimit",
+			"rate-limit",
+			"throttle",
+			"429",
+			"จำกัด request",
+			"จำกัดคำขอ",
+		],
+	},
 	{
 		name: "repo-comparison",
 		terms: [
@@ -205,10 +218,6 @@ const skillKeywords: { name: SkillName; terms: string[] }[] = [
 	{
 		name: "find-code",
 		terms: [
-			"rate limit",
-			"ratelimit",
-			"rate-limit",
-			"throttle",
 			"find code",
 			"search code",
 			"where is",

@@ -122,6 +122,7 @@ async function handleOpenAiResponses(
 					arguments: JSON.stringify({
 						repository: "sandbox/repo",
 						query: "login error",
+						ref: null,
 					}),
 				},
 			],
@@ -139,6 +140,7 @@ async function handleOpenAiResponses(
 					arguments: JSON.stringify({
 						repository: "sandbox/repo",
 						path: "src/auth/login.ts",
+						ref: "main",
 					}),
 				},
 			],
@@ -166,14 +168,9 @@ async function handleOpenAiResponses(
 function handleGitHub(url: URL, state: SandboxState): Response {
 	state.githubRequests.push(`${url.pathname}${url.search}`);
 
-	if (url.pathname === "/github/search/code") {
-		return Response.json({
-			items: [
-				{
-					path: "src/auth/login.ts",
-					html_url: "https://github.local/sandbox/repo/src/auth/login.ts",
-				},
-			],
+	if (url.pathname === "/github/repos/sandbox/repo/tarball/main") {
+		return tarGzipResponse({
+			"sandbox-repo/src/auth/login.ts": sandboxFileContent,
 		});
 	}
 
@@ -189,6 +186,47 @@ function handleGitHub(url: URL, state: SandboxState): Response {
 	}
 
 	return Response.json({ message: "not found" }, { status: 404 });
+}
+
+function tarGzipResponse(files: Record<string, string>): Response {
+	const entries = Object.entries(files).flatMap(([path, content]) => {
+		const body = new TextEncoder().encode(content);
+		const header = new Uint8Array(512);
+		writeTarText(header, 0, 100, path);
+		writeTarText(
+			header,
+			124,
+			12,
+			`${body.byteLength.toString(8).padStart(11, "0")}\0`,
+		);
+		header[156] = "0".charCodeAt(0);
+		return [
+			header,
+			body,
+			new Uint8Array((512 - (body.byteLength % 512)) % 512),
+		];
+	});
+	entries.push(new Uint8Array(1024));
+	const tar = new Uint8Array(
+		entries.reduce((total, entry) => total + entry.byteLength, 0),
+	);
+	let offset = 0;
+	for (const entry of entries) {
+		tar.set(entry, offset);
+		offset += entry.byteLength;
+	}
+	return new Response(Bun.gzipSync(tar), {
+		headers: { "Content-Type": "application/x-gzip" },
+	});
+}
+
+function writeTarText(
+	target: Uint8Array,
+	offset: number,
+	length: number,
+	value: string,
+): void {
+	target.set(new TextEncoder().encode(value).slice(0, length), offset);
 }
 
 async function sendSandboxWebhook(

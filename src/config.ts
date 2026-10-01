@@ -23,6 +23,7 @@ export type AppConfig = {
 		baseUrl: string;
 		model: string;
 		maxToolRounds: number;
+		maxToolCalls: number;
 	};
 	github: {
 		owner: string;
@@ -76,6 +77,7 @@ export function loadConfig(env: ConfigEnvironment): AppConfig {
 			baseUrl: stripTrailingSlash(env.OPENAI_BASE_URL ?? defaultOpenAiBaseUrl),
 			model: env.OPENAI_MODEL ?? "gpt-5.4-mini",
 			maxToolRounds: Number(env.OPENAI_MAX_TOOL_ROUNDS ?? "50"),
+			maxToolCalls: Number(env.OPENAI_MAX_TOOL_CALLS ?? "100"),
 		},
 		github: {
 			owner: env.GITHUB_OWNER ?? "",
@@ -182,6 +184,16 @@ export function validateConfig(config: AppConfig): void {
 	) {
 		throw new Error(
 			"OPENAI_MAX_TOOL_ROUNDS must be an integer between 0 and 50",
+		);
+	}
+
+	if (
+		!Number.isInteger(config.llm.maxToolCalls) ||
+		config.llm.maxToolCalls < 1 ||
+		config.llm.maxToolCalls > 200
+	) {
+		throw new Error(
+			"OPENAI_MAX_TOOL_CALLS must be an integer between 1 and 200",
 		);
 	}
 
